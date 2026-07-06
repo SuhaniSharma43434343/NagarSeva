@@ -1,0 +1,22 @@
+# NagarSeva SQL Agent — dependencies
+# Install with: pip install -r requirements.txt
+
+# LangChain core + SQL toolkit
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-groq>=0.2.0
+
+# LangGraph for ReAct agent (replaces deprecated create_agent)
+langgraph>=0.2.0
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# Web interface
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.32.0
