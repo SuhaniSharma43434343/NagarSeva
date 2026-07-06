@@ -34,6 +34,7 @@ adminRouter.post("/login", async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       process.env.JWT_SECRET!,
+      { expiresIn: "7d" },
     );
 
     // IMPORTANT: don't send password to frontend
@@ -60,10 +61,25 @@ adminRouter.post(
   requireAuth,
   requireRole("ADMIN"),
   async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, wardId } = req.body;
     const hashedPassword = bcrypt.hashSync(password, 10);
 
     try {
+      if (!wardId) {
+        return res.status(400).json({
+          success: false,
+          message: "wardId is required.",
+        });
+      }
+
+      const ward = await prisma.ward.findUnique({ where: { id: wardId } });
+      if (!ward) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid wardId — ward not found.",
+        });
+      }
+
       const existingEmployee = await prisma.user.findUnique({
         where: { email },
       });
@@ -76,7 +92,7 @@ adminRouter.post(
       }
 
       const newEmployee = await prisma.user.create({
-        data: { name, email, role, password: hashedPassword },
+        data: { name, email, role, password: hashedPassword, wardId },
       });
 
       return res.json({ success: true, data: newEmployee });

@@ -1,44 +1,71 @@
-from flask import Flask, render_template, request, jsonify
-import requests
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import os
+from dotenv import load_dotenv
+from SQLAgent import get_agent, ask_question
+
+load_dotenv()
 
 app = Flask(__name__)
+CORS(app)  # Allow requests from the frontend
 
-FASTAPI_URL = os.environ.get('FASTAPI_URL', 'http://localhost:5000')
+# Pre-load the agent when the server starts
+print("Initializing SQL Agent...")
+_agent = get_agent()
+if _agent:
+    print("SQL Agent ready.")
+else:
+    print("WARNING: SQL Agent failed to initialize. Check GROQ_API_KEY and DATABASE_URL.")
 
-@app.route('/')
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return jsonify({
+        "service": "NagarSeva SQL Agent",
+        "status": "running" if _agent else "agent_unavailable",
+        "description": "Natural language to SQL query interface for municipal data.",
+    })
 
-@app.route('/api/info')
-def get_info():
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "agent_ready": _agent is not None})
+
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    """
+    POST /ask?question=<your question>&language=<english|hindi|gujarati>
+    Body: (optional) { "question": "...", "language": "..." }
+    Returns: { "result": { "content": "..." }, "question": "..." }
+    """
+    if not _agent:
+        return jsonify({"error": "Agent not initialized. Check server logs."}), 503
+
+    # Accept question from query string or JSON body
+    question = request.args.get("question") or (request.get_json(silent=True) or {}).get("question", "")
+    language = request.args.get("language", "english")
+
+    if not question:
+        return jsonify({"error": "Missing 'question' parameter."}), 400
+
+    # Append language instruction if not English
+    if language == "hindi":
+        question = f"{question}\n\nPlease respond in Hindi (Devanagari script)."
+    elif language == "gujarati":
+        question = f"{question}\n\nPlease respond in Gujarati script."
+
     try:
-        response = requests.get(f'{FASTAPI_URL}/')
-        return jsonify(response.json())
+        answer = ask_question(question, _agent)
+        return jsonify({
+            "question": request.args.get("question") or question,
+            "result": {"content": answer},
+        })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/database')
-def database_info():
-    try:
-        response = requests.get(f'{FASTAPI_URL}/database')
-        return jsonify(response.json())
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/query', methods=['POST'])
-def query_database():
-    try:
-        data = request.get_json()
-        question = data.get('question', '')
-        
-        response = requests.post(
-            f'{FASTAPI_URL}/ask',
-            params={'question': question}
-        )
-        return jsonify(response.json())
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True, port=3000)
+if __name__ == "__main__":
+    # Run on port 5001 to avoid conflict with the Node.js backend (3000)
+    port = int(os.environ.get("PORT", 5001))
+    app.run(debug=False, host="0.0.0.0", port=port)

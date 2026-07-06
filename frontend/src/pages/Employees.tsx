@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useEmployees } from "@/hooks/useMockData";
+import { useEmployees, useWards } from "@/hooks/useMockData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ import { useTranslation } from 'react-i18next';
 
 const Employees = () => {
   const { data: employees, addEmployee } = useEmployees();
+  const { data: wards } = useWards();
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all");
@@ -43,7 +44,8 @@ const Employees = () => {
     email: string;
     role: "SURVEYOR" | "ENGINEER";
     password: string;
-  }>({ name: "", email: "", role: "SURVEYOR", password: "" });
+    wardId: string;
+  }>({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
 
   const filteredEmployees =
     employees?.filter((emp) => {
@@ -55,7 +57,7 @@ const Employees = () => {
     }) || [];
 
   const handleAddEmployee = () => {
-    if (!newEmployee.name || !newEmployee.email) {
+    if (!newEmployee.name || !newEmployee.email || !newEmployee.wardId) {
       toast.error(t('employees.fillAllFields'));
       return;
     }
@@ -64,9 +66,10 @@ const Employees = () => {
       email: newEmployee.email,
       role: newEmployee.role,
       password: newEmployee.password,
+      wardId: newEmployee.wardId,
     });
     toast.success(t('employees.employeeAdded'));
-    setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "" });
+    setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
     setIsDialogOpen(false);
   };
 
@@ -144,6 +147,26 @@ const Employees = () => {
                     <SelectContent>
                       <SelectItem value="SURVEYOR">{t('employees.surveyor')}</SelectItem>
                       <SelectItem value="ENGINEER">{t('employees.engineer')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ward">Ward</Label>
+                  <Select
+                    value={newEmployee.wardId}
+                    onValueChange={(value) =>
+                      setNewEmployee({ ...newEmployee, wardId: value })
+                    }
+                  >
+                    <SelectTrigger id="ward">
+                      <SelectValue placeholder="Select ward" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wards?.map((ward) => (
+                        <SelectItem key={ward.id} value={ward.id}>
+                          {ward.name} ({ward.code})
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

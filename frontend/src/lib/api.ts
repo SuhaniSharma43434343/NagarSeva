@@ -38,7 +38,7 @@ export const employeeApi = {
     return response.data;
   },
 
-  create: async (data: { name: string; email: string; password: string; role: string }) => {
+  create: async (data: { name: string; email: string; password: string; role: string; wardId: string }) => {
     const response = await api.post<ApiResponse<Employee>>('/api/admin/createEmployee', data);
     return response.data;
   },

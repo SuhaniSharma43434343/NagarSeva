@@ -15,6 +15,11 @@ import { requireAuth, requireRole } from "./middlewares/authMiddleware.js";
 
 dotenv.config();
 
+// Ensure upload directories exist before Multer tries to write to them
+["uploads/user-images", "uploads/model-images", "uploads/issues"].forEach(
+  (dir) => fs.mkdirSync(dir, { recursive: true }),
+);
+
 cloudinary.config({
   cloud_name: process.env.cloudinary_cloud_name || "",
   api_key: process.env.cloudinary_api_key || "",

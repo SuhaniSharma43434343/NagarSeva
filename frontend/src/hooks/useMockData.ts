@@ -67,6 +67,7 @@ export function useEmployees() {
       email: string;
       role: "SURVEYOR" | "ENGINEER";
       password: string;
+      wardId: string;
     }) => {
       try {
         const response = await employeeApi.create(employee);

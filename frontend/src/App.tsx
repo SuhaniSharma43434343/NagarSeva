@@ -18,6 +18,12 @@ import "./i18n";
 
 const queryClient = new QueryClient();
 
+// Redirects to /login if not authenticated
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -25,15 +31,19 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          {/* Public routes */}
           <Route path="/" element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/employees" element={<Employees />} />
-          <Route path="/routes" element={<RoutesPage />} />
-          <Route path="/issues" element={<Issues />} />
-          <Route path="/map" element={<MapView />} />
-          <Route path="/verification" element={<Verification />} />
-          <Route path="/chat" element={<ChatBotPage />} />
-          <Route path="/login" element={<Login />}></Route>
+          <Route path="/login" element={<Login />} />
+
+          {/* Protected routes */}
+          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/employees" element={<PrivateRoute><Employees /></PrivateRoute>} />
+          <Route path="/routes" element={<PrivateRoute><RoutesPage /></PrivateRoute>} />
+          <Route path="/issues" element={<PrivateRoute><Issues /></PrivateRoute>} />
+          <Route path="/map" element={<PrivateRoute><MapView /></PrivateRoute>} />
+          <Route path="/verification" element={<PrivateRoute><Verification /></PrivateRoute>} />
+          <Route path="/chat" element={<PrivateRoute><ChatBotPage /></PrivateRoute>} />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
         <ChatBotWidget />
@@ -43,3 +53,4 @@ const App = () => (
 );
 
 export default App;
+

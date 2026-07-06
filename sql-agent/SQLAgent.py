@@ -1,123 +1,93 @@
 import os
 from dotenv import load_dotenv
-import getpass
-from langchain.chat_models import init_chat_model
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-import pathlib
-import sys
-import requests
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
-from langchain.agents import create_agent
-from prompt import GetPrompt
-from sqlalchemy import select,inspect,create_engine
+from langgraph.prebuilt import create_react_agent
 from langchain_groq import ChatGroq
+from sqlalchemy import create_engine
+from prompt import GetPrompt
 
-# load environment variables
+# Load environment variables
 load_dotenv()
 
-# load model
+
 def load_model():
-  model_name='openai/gpt-oss-120b'
-  key=os.environ.get('GROQ_API_KEY')
-  if not key:
-      return None,None
-  model=ChatGroq(
-    model=model_name,
-    api_key=key
-  )
-  return model,{'Model':model_name}
+    """Load the Groq LLM."""
+    key = os.environ.get("GROQ_API_KEY")
+    if not key:
+        print("ERROR: GROQ_API_KEY not set in environment.")
+        return None
+    model = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        api_key=key,
+    )
+    return model
 
-# load database
+
 def load_database():
-    url=os.environ.get('DATABASE_URL')
+    """Connect to the PostgreSQL database via DATABASE_URL."""
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        print("ERROR: DATABASE_URL not set in environment.")
+        return None
     try:
-        engine=create_engine(url)
-        if engine:
-           print('DataBase connected')
-        else:
-           print('Failed to connect database')
+        engine = create_engine(url)
+        db = SQLDatabase(engine)
+        print(f"Database connected. Dialect: {db.dialect}")
+        print(f"Available tables: {db.get_usable_table_names()}")
+        return db
     except Exception as e:
-            print(f'Failed due to error {e}')
-    return SQLDatabase(engine)
+        print(f"Failed to connect to database: {e}")
+        return None
 
-# get db
-def db():
-    if not pathlib.Path('Chinook.db').exists():
-        if load_database()==200:
-           db=SQLDatabase.from_uri('sqlite:///Chinook.db')
-           return db
-        else:
-            return None
-    return SQLDatabase.from_uri('sqlite:///Chinook.db')
 
-# get toolkit
-def getkit(database,model):
-    if not database or not model:
-        return -1
-    toolkit=SQLDatabaseToolkit(db=database,llm=model)
-    return toolkit
-        
-# create agent
-def AgentCreate(model,tools,database):
-    prompt=GetPrompt(database)
-    agent=create_agent(model,tools,system_prompt=prompt)
+def create_agent(model, database):
+    """Create a LangGraph ReAct SQL agent."""
+    toolkit = SQLDatabaseToolkit(db=database, llm=model)
+    tools = toolkit.get_tools()
+    system_prompt = GetPrompt(database)
+    agent = create_react_agent(model, tools, prompt=system_prompt)
     return agent
 
-# ask llm 
-def AskQuestion(question,agent):
-    result=None
+
+def ask_question(question: str, agent) -> str:
+    """Send a question to the agent and return the final text answer."""
+    result = None
     for step in agent.stream(
-      {"messages": [{"role": "user", "content": question}]},
-    stream_mode="values",
+        {"messages": [{"role": "user", "content": question}]},
+        stream_mode="values",
     ):
-        result=step["messages"][-1]
-    return result
+        result = step["messages"][-1]
+
+    if result is None:
+        return "No response from agent."
+
+    # AIMessage has a .content attribute; plain strings are returned as-is
+    return result.content if hasattr(result, "content") else str(result)
 
 
-if __name__=='__main__':
-    
-    # load openai model
-    model,info=load_model()
-    if not model:
-        print(f'Failed to load model due to wrong API key or unavaliability of key')
-    else:
-        print(f"Sucessfully load the model: {info['Model']}")
-    
-    # # load database
-    # status=load_database()
-    # if status==200:
-    #     print('File downloaded and loaded successfully')
-    # else:
-    #     print('Failed to read database from the given url')
-    
-    # get database
-    database=load_database()
-    if database:
-        print(f'Dialect: {database.dialect}')
-        print(f'Available tables: {database.get_usable_table_names()}')
-    else:
-        print(f'Failed to load database information')
-    
-    # load toolkit
-    toolkit=getkit(database,model)
-    tools=toolkit.get_tools()
-    # if toolkit==-1:
-    #     print('Failed load the tool kits')
-    # else:
-    #     print('Tools available are')
-    #     tools=toolkit.get_tools()
-    #     # for tool in tools:
-    #     #     print(f'{tool.name}: {tool.description}\n')
-    
-    # load agent
-    agent=AgentCreate(model,tools,database)
-    
-    # ask question
-    question="What is the current progress and condition of our city?"
-    AskQuestion(question,agent)
-    
-    
-    
-    
+# ── Module-level singletons (loaded once when imported by interface.py) ──────
+_model = None
+_database = None
+_agent = None
+
+
+def get_agent():
+    """Return a cached agent, initializing on first call."""
+    global _model, _database, _agent
+    if _agent is None:
+        _model = load_model()
+        if not _model:
+            return None
+        _database = load_database()
+        if not _database:
+            return None
+        _agent = create_agent(_model, _database)
+    return _agent
+
+
+if __name__ == "__main__":
+    agent = get_agent()
+    if agent:
+        answer = ask_question("What is the current progress and condition of our city?", agent)
+        print(answer)
