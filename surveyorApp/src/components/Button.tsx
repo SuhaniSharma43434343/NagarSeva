@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
-    TouchableOpacity,
+    Pressable,
     Text,
     StyleSheet,
     ActivityIndicator,
     ViewStyle,
     TextStyle,
+    Animated,
 } from 'react-native';
-import { colors, typography, borderRadius, spacing } from '../theme';
+import { colors, typography, borderRadius, spacing, shadows } from '../theme';
 
-// UX4G Button Variants
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'outline' | 'warning' | 'info' | 'ghost' | 'link';
 type ButtonSize = 'sm' | 'default' | 'lg' | 'icon';
 
@@ -36,11 +36,32 @@ export default function Button({
     textStyle,
     icon,
 }: ButtonProps) {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 0.96,
+            useNativeDriver: true,
+            speed: 20,
+            bounciness: 5,
+        }).start();
+    };
+
+    const handlePressOut = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            speed: 20,
+            bounciness: 5,
+        }).start();
+    };
+
     const buttonStyles = [
         styles.button,
         styles[`size_${size}`],
         styles[variant],
         disabled && styles.disabled,
+        variant === 'primary' && !disabled && shadows.md,
         style,
     ];
 
@@ -53,25 +74,34 @@ export default function Button({
         textStyle,
     ];
 
+    const containerLayout = style ? {
+        flex: style.flex,
+        flexGrow: style.flexGrow,
+        width: style.width,
+    } : undefined;
+
     return (
-        <TouchableOpacity
-            style={buttonStyles}
-            onPress={onPress}
-            disabled={disabled || loading}
-            activeOpacity={0.8}
-        >
-            {loading ? (
-                <ActivityIndicator
-                    size="small"
-                    color={isLightText ? colors.textInverse : colors.primary}
-                />
-            ) : (
-                <>
-                    {icon}
-                    <Text style={textStyles}>{title}</Text>
-                </>
-            )}
-        </TouchableOpacity>
+        <Animated.View style={[{ transform: [{ scale: scaleAnim }] }, containerLayout]}>
+            <Pressable
+                style={buttonStyles}
+                onPress={onPress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                disabled={disabled || loading}
+            >
+                {loading ? (
+                    <ActivityIndicator
+                        size="small"
+                        color={isLightText ? colors.textInverse : colors.primary}
+                    />
+                ) : (
+                    <>
+                        {icon}
+                        <Text style={textStyles}>{title}</Text>
+                    </>
+                )}
+            </Pressable>
+        </Animated.View>
     );
 }
 
@@ -82,6 +112,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderRadius: borderRadius.lg,
         gap: spacing.sm,
+        minHeight: 52,
+        width: '100%',
     },
     // Size variants
     size_sm: {
@@ -89,18 +121,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.md,
     },
     size_default: {
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.xl,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
     },
     size_lg: {
-        paddingVertical: spacing.lg,
-        paddingHorizontal: spacing.xxl,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.xl,
     },
     size_icon: {
         padding: spacing.md,
         aspectRatio: 1,
     },
-    // UX4G Color variants
+    // Color variants
     primary: {
         backgroundColor: colors.primary,
     },
@@ -137,6 +169,8 @@ const styles = StyleSheet.create({
     // Text styles
     text: {
         ...typography.bodyBold,
+        includeFontPadding: false,
+        textAlignVertical: 'center',
     },
     text_sm: {
         ...typography.small,

@@ -126,8 +126,8 @@ class ApiService {
         return this.put<GenericResponse>('/engineer/acceptAssignment', { issueId });
     }
 
-    async engineerSolveIssue(issueId: string, engineerId: string): Promise<GenericResponse> {
-        return this.put<GenericResponse>('/engineer/solveIssue', { issueId, engineerId });
+    async engineerSolveIssue(issueId: string, engineerId: string, fixImageUri?: string, fixImageName?: string): Promise<GenericResponse> {
+        return this.put<GenericResponse>('/engineer/solveIssue', { issueId, engineerId, fixImageUri, fixImageName });
     }
 
     // ==================== FRAME UPLOAD ====================

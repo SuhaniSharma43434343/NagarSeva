@@ -3,11 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
 import api from '../services/api';
 
+export type Role = 'SURVEYOR' | 'ENGINEER' | null;
+
 interface AuthContextType {
     user: User | null;
+    role: Role;
     isLoading: boolean;
     isAuthenticated: boolean;
-    login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+    login: (email: string, password: string, selectedRole: Role) => Promise<{ success: boolean; message?: string }>;
     logout: () => Promise<void>;
 }
 
@@ -15,6 +18,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
+    const [role, setRole] = useState<Role>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -25,8 +29,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             const token = await AsyncStorage.getItem('authToken');
             const userData = await AsyncStorage.getItem('userData');
-            if (token && userData) {
+            const storedRole = await AsyncStorage.getItem('userRole');
+
+            if (token && userData && storedRole) {
                 setUser(JSON.parse(userData));
+                setRole(storedRole as Role);
                 api.setToken(token);
             }
         } catch (error) {
@@ -36,26 +43,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }
 
-    async function login(email: string, password: string): Promise<{ success: boolean; message?: string }> {
+    async function login(email: string, password: string, selectedRole: Role): Promise<{ success: boolean; message?: string }> {
         try {
-            const response = await api.login(email, password);
-            console.log('Login response:', JSON.stringify(response, null, 2));
+            let response;
+            if (selectedRole === 'SURVEYOR') {
+                response = await api.login(email, password);
+            } else if (selectedRole === 'ENGINEER') {
+                response = await api.engineerLogin(email, password);
+            } else {
+                return { success: false, message: 'Invalid role selected.' };
+            }
+
+            console.log(`${selectedRole} Login response:`, JSON.stringify(response, null, 2));
 
             if (response.token) {
-                // Decode basic user info from token or create placeholder
-                // For now, we'll store email and a generated user object
-                // The backend doesn't return user details, so we derive from email
-                const userData: User = {
-                    id: email, // Use email as ID since backend doesn't provide user ID
-                    name: email.split('@')[0], // Derive name from email
+                const cleanToken = response.token.replace(/^"|"$/g, "").trim();
+                const userData: User = (response as any).user || {
+                    id: email,
+                    name: email.split('@')[0],
                     email: email,
-                    role: 'SURVEYOR',
+                    role: selectedRole as 'SURVEYOR' | 'ENGINEER' | 'ADMIN',
                 };
 
-                await AsyncStorage.setItem('authToken', response.token);
+                await AsyncStorage.setItem('authToken', cleanToken);
                 await AsyncStorage.setItem('userData', JSON.stringify(userData));
-                api.setToken(response.token);
+                await AsyncStorage.setItem('userRole', selectedRole as string);
+                
+                api.setToken(cleanToken);
                 setUser(userData);
+                setRole(selectedRole);
                 return { success: true };
             }
 
@@ -75,14 +91,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function logout(): Promise<void> {
         await AsyncStorage.removeItem('authToken');
         await AsyncStorage.removeItem('userData');
+        await AsyncStorage.removeItem('userRole');
         api.setToken(null);
         setUser(null);
+        setRole(null);
     }
 
     return (
         <AuthContext.Provider
             value={{
                 user,
+                role,
                 isLoading,
                 isAuthenticated: !!user,
                 login,

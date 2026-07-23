@@ -5,15 +5,22 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header) return res.status(401).json({ message: "No token" });
 
-  const token = header.split(" ")[1];
+  let token = header.split(" ")[1];
+  if (token) {
+    token = token.replace(/^"|"$/g, "").trim();
+  }
+
+  const secret = process.env.JWT_SECRET || "your_jwt_secret_here";
+
   try {
     const payload = jwt.verify(
       token!,
-      process.env.JWT_SECRET!,
+      secret,
     ) as JwtPayload & { userId: string; role: string };
     req.user = payload;
     next();
-  } catch {
+  } catch (error) {
+    console.error("JWT verification error:", error);
     res.status(401).json({ message: "Invalid token" });
   }
 }

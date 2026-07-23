@@ -11,8 +11,9 @@ adminRouter.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (!user) {

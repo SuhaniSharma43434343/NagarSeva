@@ -60,7 +60,7 @@ async def detect_image(file: UploadFile = File(...)):
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
-    results = model(img, verbose=False)
+    results = model(img, conf=0.80, iou=0.45, verbose=False)
     detections = []
     for r in results:
         for box in r.boxes:
@@ -77,7 +77,7 @@ async def visualize_image(file: UploadFile = File(...)):
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    results = model(img, verbose=False)
+    results = model(img, conf=0.80, iou=0.45, verbose=False)
     _, buffer = cv2.imencode('.jpg', results[0].plot())
     return StreamingResponse(io.BytesIO(buffer), media_type="image/jpeg")
 
@@ -104,7 +104,7 @@ async def detect_video_report(file: UploadFile = File(...)):
             ret, frame = cap.read()
             if not ret: break
             if frame_count % skip_interval == 0:
-                res = model(frame, verbose=False)
+                res = model(frame, conf=0.80, iou=0.45, verbose=False)
                 total_found += len(res[0].boxes)
             frame_count += 1
             
@@ -150,7 +150,7 @@ async def detect_video_file(background_tasks: BackgroundTasks, file: UploadFile 
             if not ret: break
             
             if f_idx % skip_interval == 0:
-                results = model(frame, verbose=False)
+                results = model(frame, conf=0.80, iou=0.45, verbose=False)
                 annotated = results[0].plot()
                 out.write(annotated)
             f_idx += 1

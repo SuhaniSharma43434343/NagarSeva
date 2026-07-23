@@ -9,11 +9,11 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        NagarSeva Platform                          │
-├──────────────┬──────────────┬──────────────┬────────────────────────┤
-│   Frontend   │ Surveyor App │ Engineer App │    Microservices (AI)  │
-│  (Admin Web  │  (React      │  (React      │  (FastAPI + YOLOv8     │
-│   Dashboard) │   Native)    │   Native)    │   Pothole Detection)   │
-├──────────────┴──────────────┴──────────────┴────────────────────────┤
+├──────────────┬──────────────────────────────┬──────────────────────┤
+│   Frontend   │          Mobile App          │    Microservices (AI)│
+│  (Admin Web  │       (Surveyor &            │  (FastAPI + YOLOv8   │
+│   Dashboard) │        Engineer)             │   Pothole Detection) │
+├──────────────┴──────────────────────────────┴──────────────────────┤
 │                       Backend (Express.js REST API)                 │
 ├─────────────────────────────────────────────────────────────────────┤
 │               PostgreSQL (via Prisma ORM) + Cloudinary              │
@@ -30,8 +30,7 @@
 nagarseva/
 ├── backend/          # Express.js REST API with Prisma ORM
 ├── frontend/         # React (Vite) Admin Dashboard — web app
-├── surveyorApp/      # React Native mobile app for Surveyors
-├── engineerApp/      # React Native mobile app for Engineers
+├── surveyorApp/      # Unified React Native app for Surveyors & Engineers (merged)
 ├── microservices/    # FastAPI AI microservice (YOLOv8 pothole detection)
 ├── models/           # Pre-trained YOLO model weights (.pt files)
 ├── sql-agent/        # LangChain SQL Agent for natural-language DB queries
@@ -42,8 +41,7 @@ nagarseva/
 |---|---|---|
 | `backend/` | Node.js, Express, Prisma, PostgreSQL, Cloudinary | Core REST API — auth, CRUD, file uploads, issue lifecycle |
 | `frontend/` | React 18, Vite, TypeScript, TailwindCSS, shadcn/ui, Recharts, Leaflet | Admin dashboard — analytics, employee mgmt, map view, issue verification |
-| `surveyorApp/` | React Native 0.83, TypeScript, Vision Camera | Mobile app — surveyors capture road footage, auto-upload frames |
-| `engineerApp/` | React Native 0.83, TypeScript | Mobile app — engineers view assigned issues, mark as fixed with proof |
+| `surveyorApp/` | React Native 0.83, TypeScript, Vision Camera | Unified Mobile app — roles for both Surveyors and Engineers |
 | `microservices/` | Python, FastAPI, PyTorch, YOLOv8 (Ultralytics) | AI — pothole detection on images & videos, returns annotated results |
 | `models/` | — | Pre-trained YOLOv8 model weights for pothole and garbage detection |
 | `sql-agent/` | Python, LangChain, Groq, SQLAlchemy, Flask | NL-to-SQL chatbot — query municipal data using natural language |
@@ -153,16 +151,10 @@ pip install langchain langchain-groq langchain-community sqlalchemy flask python
 python interface.py            # Starts on http://localhost:3000
 ```
 
-### 6. Start Mobile Apps (Surveyor / Engineer)
+### 6. Start Unified Mobile App
 
 ```bash
-# Surveyor App
 cd surveyorApp
-npm install
-npx react-native run-android
-
-# Engineer App
-cd engineerApp
 npm install
 npx react-native run-android
 ```
@@ -207,8 +199,7 @@ Each folder has its own detailed README:
 
 - [`backend/README.md`](./backend/README.md) — API routes, database schema, middleware
 - [`frontend/README.md`](./frontend/README.md) — Pages, components, state management
-- [`surveyorApp/README.md`](./surveyorApp/README.md) — Mobile app screens, camera flow
-- [`engineerApp/README.md`](./engineerApp/README.md) — Mobile app screens, issue resolution flow
+- [`surveyorApp/README.md`](./surveyorApp/README.md) — Unified mobile app screens and workflows
 - [`microservices/README.md`](./microservices/README.md) — AI detection endpoints, model info
 - [`sql-agent/README.md`](./sql-agent/README.md) — Natural language query agent
 

@@ -14,13 +14,19 @@ async function hashPassword(password: string) {
 }
 
 async function main() {
-  console.log("🌱 Seeding VMC Civic Issue Monitoring System...");
+  console.log("🌱 Cleaning existing data & Seeding VMC Civic Issue Monitoring System...");
 
-  /* ===================== USERS ===================== */
+  // Clean database
+  await prisma.issueResolution.deleteMany({});
+  await prisma.issueAssignment.deleteMany({});
+  await prisma.issue.deleteMany({});
+  await prisma.surveySession.deleteMany({});
+  await prisma.routeAssignment.deleteMany({});
+  await prisma.route.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.ward.deleteMany({});
 
   /* ===================== WARDS ===================== */
-  // Create wards first since users have wardId FK
-
   await prisma.ward.createMany({
     data: [
       { name: "Alkapuri", number: 1 },
@@ -35,22 +41,35 @@ async function main() {
     orderBy: { number: "asc" },
   });
 
-  if (wards.length < 2) throw new Error("Wards not created");
+  if (wards.length < 5) throw new Error("Wards not created");
 
   const ward1 = wards[0]!;
   const ward2 = wards[1]!;
   const ward3 = wards[2]!;
+  const ward4 = wards[3]!;
+  const ward5 = wards[4]!;
 
   /* ===================== USERS ===================== */
+  const hashedPassword = await hashPassword("password");
+  const adminPassword = await hashPassword("admin123");
 
-  const admin = await prisma.user.create({
-    data: {
-      name: "Rakesh Sharma",
-      email: "admin@vmc.gov.in",
-      password: await hashPassword("admin123"),
-      role: UserRole.ADMIN,
-      wardId: ward1.id,
-    },
+  await prisma.user.createMany({
+    data: [
+      {
+        name: "Rakesh Sharma",
+        email: "admin@vmc.gov.in",
+        password: adminPassword,
+        role: UserRole.ADMIN,
+        wardId: ward1.id,
+      },
+      {
+        name: "Admin System",
+        email: "admin@nagarseva.gov.in",
+        password: adminPassword,
+        role: UserRole.ADMIN,
+        wardId: ward1.id,
+      },
+    ],
   });
 
   const SURVEYORS: Array<[string, string, string]> = [
@@ -62,15 +81,13 @@ async function main() {
   ];
 
   await prisma.user.createMany({
-    data: await Promise.all(
-      SURVEYORS.map(async ([name, email, wardId]) => ({
-        name,
-        email,
-        password: await hashPassword("password"),
-        role: UserRole.SURVEYOR,
-        wardId,
-      })),
-    ),
+    data: SURVEYORS.map(([name, email, wardId]) => ({
+      name,
+      email,
+      password: hashedPassword,
+      role: UserRole.SURVEYOR,
+      wardId,
+    })),
   });
 
   const ENGINEERS: Array<[string, string, string, "POTHOLE" | "GARBAGE"]> = [
@@ -82,37 +99,30 @@ async function main() {
   ];
 
   await prisma.user.createMany({
-    data: await Promise.all(
-      ENGINEERS.map(async ([name, email, wardId, department]) => ({
-        name,
-        email,
-        password: await hashPassword("password"),
-        role: UserRole.ENGINEER,
-        wardId,
-        department,
-      })),
-    ),
+    data: ENGINEERS.map(([name, email, wardId, department]) => ({
+      name,
+      email,
+      password: hashedPassword,
+      role: UserRole.ENGINEER,
+      wardId,
+      department,
+    })),
   });
 
   const surveyors = await prisma.user.findMany({
     where: { role: UserRole.SURVEYOR },
+    orderBy: { email: "asc" },
   });
 
   const engineers = await prisma.user.findMany({
     where: { role: UserRole.ENGINEER },
+    orderBy: { email: "asc" },
   });
-
-  if (surveyors.length < 2) throw new Error("Not enough surveyors");
-  if (engineers.length < 1) throw new Error("Not enough engineers");
 
   const surveyor1 = surveyors[0]!;
   const surveyor2 = surveyors[1]!;
-  const engineer1 = engineers[0]!;
-
-
 
   /* ===================== ROUTES ===================== */
-
   const route1 = await prisma.route.create({
     data: {
       name: "RC Dutt Road",
@@ -152,28 +162,54 @@ async function main() {
   const route4 = await prisma.route.create({
     data: {
       name: "Karelibaug Circle Road",
-      wardId: ward2.id,
-      startLat: 22.3102,
-      startLon: 73.185,
-      endLat: 22.3068,
-      endLon: 73.182,
-      distance: 1.9,
+      wardId: ward4.id,
+      startLat: 22.3245,
+      startLon: 73.195,
+      endLat: 22.331,
+      endLon: 73.205,
+      distance: 2.8,
     },
   });
 
   const route5 = await prisma.route.create({
     data: {
       name: "Waghodia Road",
-      wardId: ward2.id,
-      startLat: 22.3102,
-      startLon: 73.185,
-      endLat: 22.3068,
-      endLon: 73.182,
-      distance: 1.9,
+      wardId: ward5.id,
+      startLat: 22.2965,
+      startLon: 73.2185,
+      endLat: 22.2852,
+      endLon: 73.245,
+      distance: 4.5,
     },
   });
 
-  console.log("✅ Seeding completed successfully");
+  /* ===================== ROUTE ASSIGNMENTS (TASKS) ===================== */
+  await prisma.routeAssignment.createMany({
+    data: [
+      {
+        routeId: route1.id,
+        surveyorId: surveyor1.id,
+        status: RouteAssignmentStatus.PENDING,
+      },
+      {
+        routeId: route3.id,
+        surveyorId: surveyor1.id,
+        status: RouteAssignmentStatus.IN_PROGRESS,
+      },
+      {
+        routeId: route2.id,
+        surveyorId: surveyor2.id,
+        status: RouteAssignmentStatus.PENDING,
+      },
+      {
+        routeId: route4.id,
+        surveyorId: surveyor2.id,
+        status: RouteAssignmentStatus.PENDING,
+      },
+    ],
+  });
+
+  console.log("✅ Seeding completed successfully with Route Assignments");
 }
 
 main()

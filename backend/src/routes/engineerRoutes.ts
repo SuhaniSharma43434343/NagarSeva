@@ -53,9 +53,10 @@ engineerRouter.post("/login", async (req: Request, res: Response) => {
   }
 
   try {
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
     const user = await prisma.user.findUnique({
       where: {
-        email,
+        email: normalizedEmail,
       },
     });
 
@@ -70,13 +71,15 @@ engineerRouter.post("/login", async (req: Request, res: Response) => {
         .status(401)
         .json({ success: false, message: "invalid credentials" });
 
+    const secret = process.env.JWT_SECRET || "your_jwt_secret_here";
     const token = jwt.sign(
       { userId: user.id, role: user.role },
-      process.env.JWT_SECRET!,
+      secret,
       { expiresIn: "7d" },
     );
 
-    res.status(200).json({ token });
+    const { password: _, ...safeUser } = user;
+    res.status(200).json({ success: true, token, user: safeUser });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: "internal server error" });

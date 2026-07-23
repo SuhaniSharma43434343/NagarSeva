@@ -56,6 +56,15 @@ export interface Issue {
     routeId?: string;
     imageUrl?: string;
     createdAt: string;
+    ward?: Ward;
+    route?: Route;
+    assignmentId?: string;
+    assignedAt?: string;
+}
+
+export interface StatusUpdatePayload {
+    status: IssueStatus;
+    issueId: string;
 }
 
 // User / Surveyor

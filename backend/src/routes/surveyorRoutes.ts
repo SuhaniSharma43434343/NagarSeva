@@ -57,13 +57,14 @@ async function sendToPotholeModel(imagePath: string) {
   const form = new FormData();
   form.append("file", fs.createReadStream(imagePath));
 
+  const modelServiceUrl = process.env.MODEL_SERVICE_URL || "http://localhost:7860";
+
   const response = await axios.post(
-    "https://mynkchnn-pothole-detection-api.hf.space/detect_with_visualization",
+    `${modelServiceUrl}/detect_with_visualization`,
     form,
     {
       headers: {
         ...form.getHeaders(),
-        Authorization: process.env.hf_token || "",
       },
       responseType: "arraybuffer",
     },
@@ -143,9 +144,10 @@ surveyorRouter.post("/login", async (req: Request, res: Response) => {
   }
 
   try {
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
     const user = await prisma.user.findUnique({
       where: {
-        email,
+        email: normalizedEmail,
       },
     });
 
@@ -160,13 +162,15 @@ surveyorRouter.post("/login", async (req: Request, res: Response) => {
         .status(401)
         .json({ success: false, message: "invalid credentials" });
 
+    const secret = process.env.JWT_SECRET || "your_jwt_secret_here";
     const token = jwt.sign(
       { userId: user.id, role: user.role },
-      process.env.JWT_SECRET!,
+      secret,
       { expiresIn: "7d" },
     );
 
-    res.status(200).json({ token });
+    const { password: _, ...safeUser } = user;
+    res.status(200).json({ success: true, token, user: safeUser });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: "internal server error" });
@@ -371,11 +375,19 @@ surveyorRouter.post(
 
     try {
       const surveyor = await prisma.user.findFirst({
-        where: { email: surveyorId },
+        where: {
+          OR: [
+            { id: surveyorId },
+            { email: surveyorId },
+          ],
+        },
       });
+      if (!surveyor) {
+        return res.status(404).json({ success: false, message: "Surveyor not found." });
+      }
       const assignments = await prisma.routeAssignment.findMany({
         where: {
-          surveyorId: surveyor!.id,
+          surveyorId: surveyor.id,
         },
         include: {
           route: {

@@ -22,11 +22,13 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    const success = await login(email, password);
+    const success = await login(email.trim(), password);
 
     if (success) {
       toast.success(t('common.success'));
-      navigate('/dashboard');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 100);
     } else {
       toast.error(t('login.invalidCredentials'));
     }
@@ -90,7 +92,7 @@ const Login = () => {
           <div className="mt-6 p-4 bg-muted/30 rounded-lg">
             <p className="text-sm text-muted-foreground text-center">
               <strong>Demo credentials:</strong><br />
-              Email: admin@nagarseva.gov.in<br />
+              Email: admin@vmc.gov.in / admin@nagarseva.gov.in<br />
               Password: admin123
             </p>
           </div>

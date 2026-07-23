@@ -29,10 +29,19 @@ cloudinary.config({
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+app.get("/", (req, res) => {
+  res.json({ message: "NagarSeva Backend API operational", status: "ok" });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.use("/api/admin", adminRouter);
 app.use("/api/surveyor", surveyorRouter);
 app.use("/api/engineer", engineerRouter);
 
-app.listen(3000, () => {
-  console.log("listening on port 3000");
+app.listen(3000, "0.0.0.0", () => {
+  console.log("NagarSeva backend listening on http://0.0.0.0:3000");
 });

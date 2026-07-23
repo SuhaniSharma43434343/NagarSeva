@@ -20,7 +20,6 @@ export function useAuth() {
       if (response.success) {
         setUser(response.data.user);
         setToken(response.data.token);
-        localStorage.setItem('authToken', response.data.token);
         setIsLoading(false);
         return true;
       } else {
