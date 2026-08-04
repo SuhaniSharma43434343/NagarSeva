@@ -28,17 +28,19 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Users } from "lucide-react";
+import { Plus, Search, Users, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from 'react-i18next';
 
 const Employees = () => {
-  const { data: employees, addEmployee } = useEmployees();
+  const { data: employees, addEmployee, updateEmployee, deleteEmployee } = useEmployees();
   const { data: wards } = useWards();
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const [newEmployee, setNewEmployee] = useState<{
     name: string;
     email: string;
@@ -71,6 +73,42 @@ const Employees = () => {
     toast.success(t('employees.employeeAdded'));
     setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
     setIsDialogOpen(false);
+  };
+
+  const handleEditEmployee = (employee: any) => {
+    setEditingEmployee(employee);
+    setNewEmployee({
+      name: employee.name,
+      email: employee.email,
+      role: employee.role,
+      password: "",
+      wardId: employee.wardId,
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateEmployee = () => {
+    if (!editingEmployee || !newEmployee.name || !newEmployee.email || !newEmployee.wardId) {
+      toast.error(t('employees.fillAllFields'));
+      return;
+    }
+    updateEmployee(editingEmployee.id, {
+      name: newEmployee.name,
+      email: newEmployee.email,
+      role: newEmployee.role,
+      wardId: newEmployee.wardId,
+    });
+    toast.success(t('employees.employeeUpdated'));
+    setIsEditDialogOpen(false);
+    setEditingEmployee(null);
+    setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
+  };
+
+  const handleDeleteEmployee = (employeeId: string) => {
+    if (window.confirm("Are you sure you want to delete this employee?")) {
+      deleteEmployee(employeeId);
+      toast.success(t('employees.employeeDeleted'));
+    }
   };
 
   return (
@@ -176,6 +214,80 @@ const Employees = () => {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* Edit Employee Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Employee</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">{t('employees.fullName')}</Label>
+                  <Input
+                    id="edit-name"
+                    placeholder={t('employees.enterFullName')}
+                    value={newEmployee.name}
+                    onChange={(e) =>
+                      setNewEmployee({ ...newEmployee, name: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">{t('common.email')}</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    placeholder="employee@nagarseva.gov.in"
+                    value={newEmployee.email}
+                    onChange={(e) =>
+                      setNewEmployee({ ...newEmployee, email: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-role">{t('employees.role')}</Label>
+                  <Select
+                    value={newEmployee.role}
+                    onValueChange={(value: "SURVEYOR" | "ENGINEER") =>
+                      setNewEmployee({ ...newEmployee, role: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('employees.selectRole')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SURVEYOR">{t('employees.surveyor')}</SelectItem>
+                      <SelectItem value="ENGINEER">{t('employees.engineer')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-ward">Ward</Label>
+                  <Select
+                    value={newEmployee.wardId}
+                    onValueChange={(value) =>
+                      setNewEmployee({ ...newEmployee, wardId: value })
+                    }
+                  >
+                    <SelectTrigger id="edit-ward">
+                      <SelectValue placeholder="Select ward" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wards?.map((ward) => (
+                        <SelectItem key={ward.id} value={ward.id}>
+                          {ward.name} ({ward.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleUpdateEmployee} className="w-full">
+                  Update Employee
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Card>
@@ -210,6 +322,7 @@ const Employees = () => {
                   <TableHead>{t('common.email')}</TableHead>
                   <TableHead>{t('employees.role')}</TableHead>
                   <TableHead>{t('employees.created')}</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -229,6 +342,24 @@ const Employees = () => {
                       </Badge>
                     </TableCell>
                     <TableCell>{employee.createdAt}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditEmployee(employee)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteEmployee(employee.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

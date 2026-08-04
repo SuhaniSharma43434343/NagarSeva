@@ -9,7 +9,7 @@ import { RouteAssignment, SurveySession } from '../types';
 export type SurveyorStackParamList = {
     Dashboard: undefined;
     AssignmentDetail: { assignment: RouteAssignment };
-    Survey: { assignment: RouteAssignment };
+    Survey: { assignment: RouteAssignment; pickFromGallery?: boolean };
     SurveyComplete: { 
         frameCount: number;
         assignmentId: string;

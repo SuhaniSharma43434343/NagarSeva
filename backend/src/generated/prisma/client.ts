@@ -70,6 +70,11 @@ export type SurveySession = Prisma.SurveySessionModel
  */
 export type Issue = Prisma.IssueModel
 /**
+ * Model IssueAnalysis
+ * 
+ */
+export type IssueAnalysis = Prisma.IssueAnalysisModel
+/**
  * Model IssueAssignment
  * 
  */

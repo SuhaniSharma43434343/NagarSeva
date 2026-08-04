@@ -146,6 +146,10 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   * {
     @apply border-border;
   }
@@ -153,6 +157,9 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+    min-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 }
 

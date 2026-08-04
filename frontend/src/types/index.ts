@@ -36,12 +36,34 @@ export interface Route {
   assignedSurveyorId?: string;
   assignedSurveyorName?: string;
   status: "UNASSIGNED" | "ASSIGNED";
+  distance?: number;
+  startLat?: number;
+  startLon?: number;
+  endLat?: number;
+  endLon?: number;
+}
+
+export interface IssueAnalysis {
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  depthEstimateCm: number;
+  sizeClass: "SMALL" | "MEDIUM" | "LARGE" | "CRITICAL";
+  priorityScore: number;
+  recommendations: string;
+}
+
+export interface ResolutionAudit {
+  repairQualityScore?: number;
+  qualityRating?: string;
+  aiVerdict?: string;
+  approved?: boolean;
+  feedback?: string;
 }
 
 export interface Issue {
   id: string;
   type: IssueType;
   status: IssueStatus;
+  confidence?: number;
   wardId: string;
   wardName: string;
   routeId: string;
@@ -53,6 +75,8 @@ export interface Issue {
   assignedEngineerId?: string;
   assignedEngineerName?: string;
   feedback?: string;
+  analysis?: IssueAnalysis | null;
+  resolutionAudit?: ResolutionAudit | null;
   createdAt: string;
   updatedAt: string;
   afterImageUrl: string;
@@ -78,5 +102,6 @@ export interface Employee {
   name: string;
   email: string;
   role: "SURVEYOR" | "ENGINEER";
+  wardId?: string;
   createdAt: string;
 }

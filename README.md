@@ -148,7 +148,7 @@ python app.py                  # Starts on http://localhost:7860
 ```bash
 cd sql-agent
 pip install langchain langchain-groq langchain-community sqlalchemy flask python-dotenv
-python interface.py            # Starts on http://localhost:3000
+python interface.py            # Starts on http://localhost:5001
 ```
 
 ### 6. Start Unified Mobile App

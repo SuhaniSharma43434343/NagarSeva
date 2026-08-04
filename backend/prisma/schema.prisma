@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -117,6 +116,7 @@ model Issue {
   
   latitude Float
   longitude Float
+  confidence Float?
 
   wardId String
   ward Ward @relation(fields: [wardId], references: [id])
@@ -130,10 +130,26 @@ model Issue {
   imageUrl String
   afterUrl String?
 
+  updatedAt DateTime @updatedAt
+
   assignments IssueAssignment[]
   resolutions IssueResolution[]
+  analysis IssueAnalysis?
 
   createdAt DateTime @default(now())
+}
+
+model IssueAnalysis {
+  id              String   @id @default(uuid())
+  issueId         String   @unique
+  severity        String
+  depthEstimateCm Float
+  sizeClass       String
+  priorityScore   Int
+  recommendations String
+  analyzedAt      DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
 }
 
 model IssueAssignment {
@@ -152,6 +168,10 @@ model IssueResolution {
   issueId String
   approved Boolean @default(false)
   feedback String?
+
+  repairQualityScore Int?
+  qualityRating      String?
+  aiVerdict          String?
 
   issue Issue @relation(fields: [issueId], references: [id])
 

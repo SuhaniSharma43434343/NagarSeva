@@ -7,6 +7,7 @@ import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.awesomeproject.video.FrameExtractorPackage   // 👈 ADD THIS
+import com.awesomeproject.Detector.PotholeDetectorPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -17,6 +18,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           // 👇 REGISTER YOUR NATIVE MODULE HERE
           add(FrameExtractorPackage())
+          add(PotholeDetectorPackage())
         },
     )
   }

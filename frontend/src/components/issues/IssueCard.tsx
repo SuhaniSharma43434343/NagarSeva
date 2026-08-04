@@ -3,71 +3,170 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Issue } from '@/types';
 import { getIssueTypeLabel, getStatusBadgeVariant, getIssueTypeIcon } from '@/lib/issueUtils';
-import { MapPin, Clock, User, Wrench } from 'lucide-react';
+import { MapPin, Clock, User, Wrench, Sparkles, AlertTriangle, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 interface IssueCardProps {
   issue: Issue;
   onAssignClick: (issue: Issue) => void;
   onVerifyClick: (issue: Issue) => void;
+  onAnalyzeClick?: (issue: Issue) => Promise<void>;
+  onDeleteClick?: (issue: Issue) => void;
 }
 
-export const IssueCard = ({ issue, onAssignClick, onVerifyClick }: IssueCardProps) => {
+export const IssueCard = ({ issue, onAssignClick, onVerifyClick, onAnalyzeClick, onDeleteClick }: IssueCardProps) => {
   const canAssign = issue.status === 'DETECTED';
   const canVerify = issue.status === 'FIXED';
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const handleAnalyze = async () => {
+    if (!onAnalyzeClick) return;
+    setAnalyzing(true);
+    try {
+      await onAnalyzeClick(issue);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const getSeverityBadgeClass = (severity?: string) => {
+    switch (severity) {
+      case 'CRITICAL': return 'bg-red-600 text-white font-bold';
+      case 'HIGH': return 'bg-orange-500 text-white';
+      case 'MEDIUM': return 'bg-yellow-500 text-black';
+      case 'LOW': return 'bg-blue-500 text-white';
+      default: return 'bg-gray-500 text-white';
+    }
+  };
 
   return (
-    <Card className="overflow-hidden hover:shadow-md transition-shadow">
-      <div className="aspect-video relative">
-        <img
-          src={issue.imageUrl}
-          alt={issue.type}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute top-2 left-2 flex gap-2">
-          <Badge className="bg-background/90 text-foreground">
-            {getIssueTypeIcon(issue.type)} {getIssueTypeLabel(issue.type)}
+    <Card className="overflow-hidden hover:shadow-xl hover:border-primary/40 transition-all duration-300 flex flex-col justify-between group border border-border/60 bg-card/95 backdrop-blur-sm">
+      <div>
+        <div className="aspect-video relative overflow-hidden bg-slate-950">
+          <img
+            src={
+              issue.imageUrl?.startsWith("data:") || issue.imageUrl?.startsWith("http")
+                ? issue.imageUrl
+                : issue.imageUrl?.startsWith("/")
+                  ? `http://localhost:3000${issue.imageUrl}`
+                  : issue.imageUrl
+                    ? `http://localhost:3000/${issue.imageUrl}`
+                    : "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80"
+            }
+            alt={issue.type}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={(e) => {
+              const fallback = "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80";
+              if (e.currentTarget.src !== fallback) {
+                e.currentTarget.src = fallback;
+              }
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 pointer-events-none" />
+
+          <div className="absolute top-3 left-3 flex gap-2 z-10">
+            <Badge className="bg-black/60 backdrop-blur-md text-white border border-white/20 shadow-sm font-medium">
+              {getIssueTypeIcon(issue.type)} {getIssueTypeLabel(issue.type)}
+            </Badge>
+            {issue.confidence && (
+              <Badge className="bg-emerald-500/90 text-white backdrop-blur-md border border-emerald-400/30 text-xs font-semibold shadow-sm flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                {(issue.confidence * 100).toFixed(0)}% Conf
+              </Badge>
+            )}
+          </div>
+
+          <Badge
+            variant={getStatusBadgeVariant(issue.status)}
+            className="absolute top-3 right-3 z-10 font-semibold shadow-md px-2.5 py-0.5"
+          >
+            {issue.status.replace('_', ' ')}
           </Badge>
+
+          {onDeleteClick && (
+            <Button
+              variant="destructive"
+              size="icon"
+              className="absolute bottom-3 right-3 w-8 h-8 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 shadow-lg"
+              onClick={() => onDeleteClick(issue)}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
         </div>
-        <Badge
-          variant={getStatusBadgeVariant(issue.status)}
-          className="absolute top-2 right-2"
-        >
-          {issue.status.replace('_', ' ')}
-        </Badge>
+
+        <CardHeader className="pb-2 pt-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
+            <MapPin className="w-4 h-4 text-primary shrink-0" />
+            <span className="truncate">{issue.wardName}</span>
+          </CardTitle>
+          <CardDescription className="text-xs text-muted-foreground truncate">{issue.routeName}</CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
+          {issue.description && (
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {issue.description}
+            </p>
+          )}
+
+          <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-2 rounded-md border border-border/40">
+            <span className="flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-primary/70" />
+              {new Date(issue.createdAt).toLocaleDateString()}
+            </span>
+            <span className="font-mono text-[11px] bg-background/80 px-2 py-0.5 rounded border">
+              {issue.latitude.toFixed(4)}, {issue.longitude.toFixed(4)}
+            </span>
+          </div>
+
+          {/* AI Analysis Panel */}
+          {issue.analysis && (
+            <div className="p-3 bg-gradient-to-br from-primary/5 via-primary/10 to-background rounded-lg border border-primary/20 text-xs space-y-2 shadow-inner">
+              <div className="flex items-center justify-between font-semibold">
+                <span className="flex items-center gap-1.5 text-primary">
+                  <Sparkles className="w-4 h-4 animate-pulse text-amber-500" /> AI Analysis Results
+                </span>
+                <Badge className={getSeverityBadgeClass(issue.analysis.severity)}>
+                  {issue.analysis.severity}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-muted-foreground pt-1">
+                <div>Depth: <strong className="text-foreground">{issue.analysis.depthEstimateCm} cm</strong></div>
+                <div>Priority: <strong className="text-foreground">{issue.analysis.priorityScore}/10</strong></div>
+                <div>Size: <strong className="text-foreground">{issue.analysis.sizeClass}</strong></div>
+              </div>
+              <p className="text-[11px] text-muted-foreground italic border-t border-border/40 pt-1.5 mt-1">
+                "{issue.analysis.recommendations}"
+              </p>
+            </div>
+          )}
+
+          {onAnalyzeClick && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-xs border-dashed text-primary border-primary/50 hover:bg-primary/5 mt-2"
+              onClick={handleAnalyze}
+              disabled={analyzing}
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1" />
+              {analyzing 
+                ? 'Running YOLOv8 AI Model Analysis...' 
+                : (issue.analysis ? 'Re-Analyze with AI Model' : 'Analyze with AI Model')}
+            </Button>
+          )}
+
+          {issue.assignedEngineerName && (
+            <div className="flex items-center gap-2 text-sm">
+              <User className="w-4 h-4 text-muted-foreground" />
+              <span>{issue.assignedEngineerName}</span>
+            </div>
+          )}
+        </CardContent>
       </div>
 
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-primary" />
-          {issue.wardName}
-        </CardTitle>
-        <CardDescription>{issue.routeName}</CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-3">
-        {issue.description && (
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {issue.description}
-          </p>
-        )}
-
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {new Date(issue.createdAt).toLocaleDateString()}
-          </span>
-          <span className="font-mono">
-            {issue.latitude.toFixed(4)}, {issue.longitude.toFixed(4)}
-          </span>
-        </div>
-
-        {issue.assignedEngineerName && (
-          <div className="flex items-center gap-2 text-sm">
-            <User className="w-4 h-4 text-muted-foreground" />
-            <span>{issue.assignedEngineerName}</span>
-          </div>
-        )}
-
+      <CardContent className="pt-0">
         <div className="flex gap-2 pt-2">
           {canAssign && (
             <Button

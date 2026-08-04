@@ -144,8 +144,8 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       )}
 
       {/* Main Content */}
-      <main className="lg:pl-64 pt-16 lg:pt-0">
-        <div className="p-6 lg:p-8">{children}</div>
+      <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen overflow-x-hidden">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">{children}</div>
       </main>
     </div>
   );

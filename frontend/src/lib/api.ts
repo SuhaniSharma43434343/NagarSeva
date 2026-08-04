@@ -42,6 +42,16 @@ export const employeeApi = {
     const response = await api.post<ApiResponse<Employee>>('/api/admin/createEmployee', data);
     return response.data;
   },
+
+  update: async (employeeId: string, data: { name?: string; email?: string; role?: string; wardId?: string }) => {
+    const response = await api.put<ApiResponse<Employee>>(`/api/admin/updateEmployee/${employeeId}`, data);
+    return response.data;
+  },
+
+  delete: async (employeeId: string) => {
+    const response = await api.delete<ApiResponse<any>>(`/api/admin/deleteEmployee/${employeeId}`);
+    return response.data;
+  },
 };
 
 // Ward API
@@ -64,6 +74,31 @@ export const routeApi = {
       surveyorId,
       routeId,
     });
+    return response.data;
+  },
+
+  getRoadHealth: async () => {
+    const response = await api.get<ApiResponse<any>>('/api/admin/roadHealth');
+    return response.data;
+  },
+
+  getMonsoonRisk: async () => {
+    const response = await api.get<ApiResponse<any>>('/api/admin/monsoonRisk');
+    return response.data;
+  },
+
+  createRoute: async (payload: { name: string; wardId: string; distance?: number; startLat?: number; startLon?: number; endLat?: number; endLon?: number }) => {
+    const response = await api.post<ApiResponse<Route>>('/api/admin/createRoute', payload);
+    return response.data;
+  },
+
+  update: async (routeId: string, payload: { name?: string; wardId?: string; distance?: number; startLat?: number; startLon?: number; endLat?: number; endLon?: number }) => {
+    const response = await api.put<ApiResponse<Route>>(`/api/admin/updateRoute/${routeId}`, payload);
+    return response.data;
+  },
+
+  delete: async (routeId: string) => {
+    const response = await api.delete<ApiResponse<any>>(`/api/admin/deleteRoute/${routeId}`);
     return response.data;
   },
 };
@@ -95,6 +130,26 @@ export const issueApi = {
       resolution,
       feedback,
     });
+    return response.data;
+  },
+
+  analyzeIssue: async (issueId: string) => {
+    const response = await api.post<ApiResponse<any>>(`/api/admin/analyzeIssue/${issueId}`);
+    return response.data;
+  },
+
+  auditResolution: async (issueId: string) => {
+    const response = await api.post<ApiResponse<any>>(`/api/admin/auditResolution/${issueId}`);
+    return response.data;
+  },
+
+  delete: async (issueId: string) => {
+    const response = await api.delete<ApiResponse<any>>(`/api/admin/issue/${issueId}`);
+    return response.data;
+  },
+
+  bulkDelete: async (issueIds: string[]) => {
+    const response = await api.post<ApiResponse<any>>('/api/admin/bulkDeleteIssues', { issueIds });
     return response.data;
   },
 };

@@ -10,7 +10,7 @@ import {
     Alert,
     Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Issue } from '../../types';
@@ -24,6 +24,7 @@ type NavigationProp = NativeStackNavigationProp<EngineerStackParamList, 'Issues'
 type FilterTab = 'ALL' | 'ASSIGNED' | 'IN_PROGRESS' | 'FIXED';
 
 export function IssuesScreen() {
+    const insets = useSafeAreaInsets();
     const [issues, setIssues] = useState<Issue[]>([]);
     const [filteredIssues, setFilteredIssues] = useState<Issue[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -35,7 +36,8 @@ export function IssuesScreen() {
     const fetchIssues = useCallback(async () => {
         try {
             const response = await api.get<any>('/engineer/issues');
-            const data = response.data;
+            // Backend returns { issues: [...] } not { data: [...] }
+            const data: Issue[] = Array.isArray(response.issues) ? response.issues : [];
             setIssues(data);
             filterIssues(data, activeFilter);
         } catch (error: any) {
@@ -76,11 +78,15 @@ export function IssuesScreen() {
 
     const handleAcceptIssue = async (issue: Issue) => {
         try {
-            await api.post(`/issues/${issue.id}/accept`);
-            Alert.alert('Success', 'Issue accepted! Status changed to In Progress.');
-            handleRefresh();
+            const response = await api.engineerAcceptAssignment(issue.id);
+            if (response.success) {
+                Alert.alert('Success', 'Issue accepted! Status changed to In Progress.');
+                handleRefresh();
+            } else {
+                Alert.alert('Error', response.message || 'Failed to accept issue');
+            }
         } catch (error: any) {
-            const message = error.response?.data?.message || 'Failed to accept issue';
+            const message = error.message || 'Failed to accept issue';
             Alert.alert('Error', message);
         }
     };
@@ -189,7 +195,7 @@ export function IssuesScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
             <View style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
@@ -250,7 +256,8 @@ export function IssuesScreen() {
                     data={filteredIssues}
                     renderItem={renderIssueCard}
                     keyExtractor={(item, index) => `${item.id}-${index}`}
-                    contentContainerStyle={styles.listContent}
+                    style={{ flex: 1 }}
+                    contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom + 60, 90) }]}
                     refreshControl={
                         <RefreshControl
                             refreshing={isRefreshing}

@@ -390,6 +390,7 @@ export const ModelName = {
   RouteAssignment: 'RouteAssignment',
   SurveySession: 'SurveySession',
   Issue: 'Issue',
+  IssueAnalysis: 'IssueAnalysis',
   IssueAssignment: 'IssueAssignment',
   IssueResolution: 'IssueResolution'
 } as const
@@ -407,7 +408,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "ward" | "route" | "routeAssignment" | "surveySession" | "issue" | "issueAssignment" | "issueResolution"
+    modelProps: "user" | "ward" | "route" | "routeAssignment" | "surveySession" | "issue" | "issueAnalysis" | "issueAssignment" | "issueResolution"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -855,6 +856,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    IssueAnalysis: {
+      payload: Prisma.$IssueAnalysisPayload<ExtArgs>
+      fields: Prisma.IssueAnalysisFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.IssueAnalysisFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.IssueAnalysisFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>
+        }
+        findFirst: {
+          args: Prisma.IssueAnalysisFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.IssueAnalysisFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>
+        }
+        findMany: {
+          args: Prisma.IssueAnalysisFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>[]
+        }
+        create: {
+          args: Prisma.IssueAnalysisCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>
+        }
+        createMany: {
+          args: Prisma.IssueAnalysisCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.IssueAnalysisCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>[]
+        }
+        delete: {
+          args: Prisma.IssueAnalysisDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>
+        }
+        update: {
+          args: Prisma.IssueAnalysisUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>
+        }
+        deleteMany: {
+          args: Prisma.IssueAnalysisDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.IssueAnalysisUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.IssueAnalysisUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>[]
+        }
+        upsert: {
+          args: Prisma.IssueAnalysisUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IssueAnalysisPayload>
+        }
+        aggregate: {
+          args: Prisma.IssueAnalysisAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateIssueAnalysis>
+        }
+        groupBy: {
+          args: Prisma.IssueAnalysisGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.IssueAnalysisGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.IssueAnalysisCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.IssueAnalysisCountAggregateOutputType> | number
+        }
+      }
+    }
     IssueAssignment: {
       payload: Prisma.$IssueAssignmentPayload<ExtArgs>
       fields: Prisma.IssueAssignmentFieldRefs
@@ -1107,6 +1182,7 @@ export const IssueScalarFieldEnum = {
   status: 'status',
   latitude: 'latitude',
   longitude: 'longitude',
+  confidence: 'confidence',
   wardId: 'wardId',
   surveySessionId: 'surveySessionId',
   routeId: 'routeId',
@@ -1116,6 +1192,20 @@ export const IssueScalarFieldEnum = {
 } as const
 
 export type IssueScalarFieldEnum = (typeof IssueScalarFieldEnum)[keyof typeof IssueScalarFieldEnum]
+
+
+export const IssueAnalysisScalarFieldEnum = {
+  id: 'id',
+  issueId: 'issueId',
+  severity: 'severity',
+  depthEstimateCm: 'depthEstimateCm',
+  sizeClass: 'sizeClass',
+  priorityScore: 'priorityScore',
+  recommendations: 'recommendations',
+  analyzedAt: 'analyzedAt'
+} as const
+
+export type IssueAnalysisScalarFieldEnum = (typeof IssueAnalysisScalarFieldEnum)[keyof typeof IssueAnalysisScalarFieldEnum]
 
 
 export const IssueAssignmentScalarFieldEnum = {
@@ -1133,6 +1223,9 @@ export const IssueResolutionScalarFieldEnum = {
   issueId: 'issueId',
   approved: 'approved',
   feedback: 'feedback',
+  repairQualityScore: 'repairQualityScore',
+  qualityRating: 'qualityRating',
+  aiVerdict: 'aiVerdict',
   verifiedByAdminId: 'verifiedByAdminId',
   createdAt: 'createdAt'
 } as const
@@ -1403,6 +1496,7 @@ export type GlobalOmitConfig = {
   routeAssignment?: Prisma.RouteAssignmentOmit
   surveySession?: Prisma.SurveySessionOmit
   issue?: Prisma.IssueOmit
+  issueAnalysis?: Prisma.IssueAnalysisOmit
   issueAssignment?: Prisma.IssueAssignmentOmit
   issueResolution?: Prisma.IssueResolutionOmit
 }

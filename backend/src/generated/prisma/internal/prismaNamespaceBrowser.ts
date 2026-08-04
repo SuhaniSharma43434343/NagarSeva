@@ -57,6 +57,7 @@ export const ModelName = {
   RouteAssignment: 'RouteAssignment',
   SurveySession: 'SurveySession',
   Issue: 'Issue',
+  IssueAnalysis: 'IssueAnalysis',
   IssueAssignment: 'IssueAssignment',
   IssueResolution: 'IssueResolution'
 } as const
@@ -142,6 +143,7 @@ export const IssueScalarFieldEnum = {
   status: 'status',
   latitude: 'latitude',
   longitude: 'longitude',
+  confidence: 'confidence',
   wardId: 'wardId',
   surveySessionId: 'surveySessionId',
   routeId: 'routeId',
@@ -151,6 +153,20 @@ export const IssueScalarFieldEnum = {
 } as const
 
 export type IssueScalarFieldEnum = (typeof IssueScalarFieldEnum)[keyof typeof IssueScalarFieldEnum]
+
+
+export const IssueAnalysisScalarFieldEnum = {
+  id: 'id',
+  issueId: 'issueId',
+  severity: 'severity',
+  depthEstimateCm: 'depthEstimateCm',
+  sizeClass: 'sizeClass',
+  priorityScore: 'priorityScore',
+  recommendations: 'recommendations',
+  analyzedAt: 'analyzedAt'
+} as const
+
+export type IssueAnalysisScalarFieldEnum = (typeof IssueAnalysisScalarFieldEnum)[keyof typeof IssueAnalysisScalarFieldEnum]
 
 
 export const IssueAssignmentScalarFieldEnum = {
@@ -168,6 +184,9 @@ export const IssueResolutionScalarFieldEnum = {
   issueId: 'issueId',
   approved: 'approved',
   feedback: 'feedback',
+  repairQualityScore: 'repairQualityScore',
+  qualityRating: 'qualityRating',
+  aiVerdict: 'aiVerdict',
   verifiedByAdminId: 'verifiedByAdminId',
   createdAt: 'createdAt'
 } as const

@@ -154,7 +154,7 @@ engineerRouter.put(
           .json({ success: false, message: "Invalid issue ID." });
       }
 
-      if (issue.status !== "ASSIGNED") {
+      if (issue.status !== "ASSIGNED" && issue.status !== "IN_PROGRESS") {
         return res.status(400).json({
           success: false,
           message: "Issue is not in an assigned state.",
@@ -209,14 +209,25 @@ engineerRouter.put(
           .json({ success: false, message: "Issue not found" });
       }
 
-      if (issue.status === "RESOLVED") {
+      if (issue.status === "RESOLVED" || issue.status === "FIXED") {
         return res
           .status(400)
-          .json({ success: false, message: "Issue is already resolved" });
+          .json({ success: false, message: "Issue is already resolved or fixed" });
+      }
+
+      if (issue.status !== "IN_PROGRESS" && issue.status !== "ASSIGNED") {
+        return res
+          .status(400)
+          .json({ success: false, message: "Issue must be IN_PROGRESS or ASSIGNED to be marked as fixed" });
       }
 
       const uploadImage = await cloudinary.uploader.upload(
         `uploads/issues/${file.filename}`,
+        {
+          folder: "issue-resolutions",
+          quality: "auto",
+          fetch_format: "auto",
+        }
       );
 
       const updatedIssue = await prisma.issue.update({

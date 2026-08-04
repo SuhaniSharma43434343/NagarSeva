@@ -183,9 +183,31 @@ async function main() {
     },
   });
 
+  const route6 = await prisma.route.create({
+    data: {
+      name: "Demo Road Patrol Corridor",
+      wardId: ward3.id,
+      startLat: 22.2873,
+      startLon: 73.3616,
+      endLat: 22.2950,
+      endLon: 73.3700,
+      distance: 3.2,
+    },
+  });
+
   /* ===================== ROUTE ASSIGNMENTS (TASKS) ===================== */
   await prisma.routeAssignment.createMany({
     data: [
+      {
+        routeId: route6.id,
+        surveyorId: surveyor1.id,
+        status: RouteAssignmentStatus.PENDING,
+      },
+      {
+        routeId: route5.id,
+        surveyorId: surveyor1.id,
+        status: RouteAssignmentStatus.IN_PROGRESS,
+      },
       {
         routeId: route1.id,
         surveyorId: surveyor1.id,

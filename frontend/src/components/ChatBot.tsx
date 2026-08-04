@@ -135,7 +135,7 @@ export function ChatBot() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col h-[calc(100vh-9.5rem)] min-h-[500px]">
       {/* Page Header */}
       <div className="flex-shrink-0 mb-6">
         <div className="flex items-center gap-4">
