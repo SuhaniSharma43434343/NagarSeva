@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
+    "android": "adb reverse tcp:3000 tcp:3000 && adb reverse tcp:7860 tcp:7860 && adb reverse tcp:8081 tcp:8081 && react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/geolocation": "^3.4.0",
+    "@react-native-community/netinfo": "^11.5.2",
     "@react-native/new-app-screen": "0.83.1",
     "@react-navigation/native": "^7.1.28",
     "@react-navigation/native-stack": "^7.10.0",

@@ -41,6 +41,8 @@ const Employees = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newEmployee, setNewEmployee] = useState<{
     name: string;
     email: string;
@@ -58,21 +60,36 @@ const Employees = () => {
       return matchesSearch && matchesRole;
     }) || [];
 
-  const handleAddEmployee = () => {
+  const handleAddEmployee = async () => {
     if (!newEmployee.name || !newEmployee.email || !newEmployee.wardId) {
       toast.error(t('employees.fillAllFields'));
       return;
     }
-    addEmployee({
-      name: newEmployee.name,
-      email: newEmployee.email,
-      role: newEmployee.role,
-      password: newEmployee.password,
-      wardId: newEmployee.wardId,
-    });
-    toast.success(t('employees.employeeAdded'));
-    setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
-    setIsDialogOpen(false);
+    if (!newEmployee.password || newEmployee.password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const result = await addEmployee({
+        name: newEmployee.name,
+        email: newEmployee.email,
+        role: newEmployee.role,
+        password: newEmployee.password,
+        wardId: newEmployee.wardId,
+      });
+      if (result && result.success) {
+        toast.success(t('employees.employeeAdded'));
+        setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
+        setIsDialogOpen(false);
+      } else {
+        toast.error(result?.message || "Failed to add employee.");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add employee.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleEditEmployee = (employee: any) => {
@@ -87,27 +104,49 @@ const Employees = () => {
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateEmployee = () => {
+  const handleUpdateEmployee = async () => {
     if (!editingEmployee || !newEmployee.name || !newEmployee.email || !newEmployee.wardId) {
       toast.error(t('employees.fillAllFields'));
       return;
     }
-    updateEmployee(editingEmployee.id, {
-      name: newEmployee.name,
-      email: newEmployee.email,
-      role: newEmployee.role,
-      wardId: newEmployee.wardId,
-    });
-    toast.success(t('employees.employeeUpdated'));
-    setIsEditDialogOpen(false);
-    setEditingEmployee(null);
-    setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
+    setIsSubmitting(true);
+    try {
+      const result = await updateEmployee(editingEmployee.id, {
+        name: newEmployee.name,
+        email: newEmployee.email,
+        role: newEmployee.role,
+        wardId: newEmployee.wardId,
+      });
+      if (result && result.success) {
+        toast.success(t('employees.employeeUpdated'));
+        setIsEditDialogOpen(false);
+        setEditingEmployee(null);
+        setNewEmployee({ name: "", email: "", role: "SURVEYOR", password: "", wardId: "" });
+      } else {
+        toast.error(result?.message || "Failed to update employee.");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update employee.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteEmployee = (employeeId: string) => {
+  const handleDeleteEmployee = async (employeeId: string) => {
     if (window.confirm("Are you sure you want to delete this employee?")) {
-      deleteEmployee(employeeId);
-      toast.success(t('employees.employeeDeleted'));
+      setDeletingId(employeeId);
+      try {
+        const result = await deleteEmployee(employeeId);
+        if (result && result.success) {
+          toast.success(t('employees.employeeDeleted'));
+        } else {
+          toast.error(result?.message || "Failed to delete employee.");
+        }
+      } catch (err: any) {
+        toast.error(err.message || "Failed to delete employee.");
+      } finally {
+        setDeletingId(null);
+      }
     }
   };
 
@@ -160,8 +199,8 @@ const Employees = () => {
                   <Label htmlFor="password">{t('common.password')}</Label>
                   <Input
                     id="password"
-                    type="text"
-                    placeholder="password123"
+                    type="password"
+                    placeholder="Min. 6 characters"
                     value={newEmployee.password}
                     onChange={(e) =>
                       setNewEmployee({
@@ -208,8 +247,8 @@ const Employees = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleAddEmployee} className="w-full">
-                  {t('employees.addEmployee')}
+                <Button onClick={handleAddEmployee} disabled={isSubmitting} className="w-full">
+                  {isSubmitting ? "Adding..." : t('employees.addEmployee')}
                 </Button>
               </div>
             </DialogContent>
@@ -282,8 +321,8 @@ const Employees = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleUpdateEmployee} className="w-full">
-                  Update Employee
+                <Button onClick={handleUpdateEmployee} disabled={isSubmitting} className="w-full">
+                  {isSubmitting ? "Updating..." : "Update Employee"}
                 </Button>
               </div>
             </DialogContent>
@@ -347,6 +386,7 @@ const Employees = () => {
                         <Button
                           variant="ghost"
                           size="icon"
+                          disabled={deletingId === employee.id}
                           onClick={() => handleEditEmployee(employee)}
                         >
                           <Pencil className="w-4 h-4" />
@@ -354,6 +394,7 @@ const Employees = () => {
                         <Button
                           variant="ghost"
                           size="icon"
+                          disabled={deletingId === employee.id}
                           onClick={() => handleDeleteEmployee(employee.id)}
                         >
                           <Trash2 className="w-4 h-4 text-destructive" />

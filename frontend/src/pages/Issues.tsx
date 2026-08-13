@@ -6,7 +6,7 @@ import { IssueFilters } from "@/components/issues/IssueFilters";
 import { AssignEngineerDialog } from "@/components/issues/AssignEngineerDialog";
 import { VerifyResolutionDialog } from "@/components/issues/VerifyResolutionDialog";
 import type { Issue, IssueType, IssueStatus } from "@/types";
-import { AlertTriangle, Download, Trash2, LayoutGrid, List, Sparkles, UserCheck, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, Download, Trash2, LayoutGrid, List, Sparkles, UserCheck, CheckCircle2, RefreshCw } from "lucide-react";
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 
 const Issues = () => {
-  const { data: issues, assignEngineer, verifyResolution, analyzeIssue, deleteIssue, bulkDeleteIssues } = useIssues();
+  const { data: issues, isLoading, assignEngineer, verifyResolution, analyzeIssue, deleteIssue, bulkDeleteIssues, refetch } = useIssues();
   const { data: engineers } = useEngineers();
   const { data: wards } = useWards();
   const { t } = useTranslation();
@@ -76,22 +76,22 @@ const Issues = () => {
   const handleAnalyzeClick = async (issue: Issue) => {
     if (analyzeIssue) {
       const res = await analyzeIssue(issue.id);
-      if (res) {
+      if (res && res.success) {
         toast.success(`AI Model Analysis completed successfully!`);
       } else {
-        toast.error("Failed to run AI Model analysis.");
+        toast.error(res?.message || "Failed to run AI Model analysis.");
       }
     }
   };
 
   const handleDeleteClick = async (issue: Issue) => {
     if (window.confirm("Are you sure you want to delete this issue? This action cannot be undone.")) {
-      const success = await deleteIssue(issue.id);
-      if (success) {
+      const res = await deleteIssue(issue.id);
+      if (res && res.success) {
         toast.success("Issue deleted successfully");
         setSelectedIssueIds((prev) => prev.filter((id) => id !== issue.id));
       } else {
-        toast.error("Failed to delete issue");
+        toast.error(res?.message || "Failed to delete issue");
       }
     }
   };
@@ -105,15 +105,15 @@ const Issues = () => {
     ) {
       setIsBulkDeleting(true);
       try {
-        const success = await bulkDeleteIssues(selectedIssueIds);
-        if (success) {
+        const res = await bulkDeleteIssues(selectedIssueIds);
+        if (res && res.success) {
           toast.success(`Successfully deleted ${selectedIssueIds.length} issue(s).`);
           setSelectedIssueIds([]);
         } else {
-          toast.error("Failed to delete selected issues.");
+          toast.error(res?.message || "Failed to delete selected issues.");
         }
-      } catch (err) {
-        toast.error("Error bulk deleting issues.");
+      } catch (err: any) {
+        toast.error(err.message || "Error bulk deleting issues.");
       } finally {
         setIsBulkDeleting(false);
       }
@@ -125,29 +125,27 @@ const Issues = () => {
       toast.error("No issues available to export");
       return;
     }
-    const headers = ["ID", "Type", "Status", "Ward", "Route", "Latitude", "Longitude", "Created At", "Assigned Engineer"];
-    const rows = filteredIssues.map((i) => [
-      i.id,
-      i.type,
-      i.status,
-      `"${i.wardName || ""}"`,
-      `"${i.routeName || ""}"`,
-      i.latitude,
-      i.longitude,
-      i.createdAt,
-      `"${i.assignedEngineerName || "Unassigned"}"`,
-    ]);
-
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `NagarSeva_Issues_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success(`Exported ${filteredIssues.length} issue(s) to CSV`);
+    // Use backend export endpoint with current active filters (server-side CSV with auth token)
+    const token = localStorage.getItem('authToken')?.replace(/^"|"$/g, '');
+    const url = issueApi.getExportUrl({
+      wardId: filters.wardId !== 'all' ? filters.wardId : undefined,
+      status: filters.status !== 'all' ? filters.status : undefined,
+      startDate: filters.fromDate || undefined,
+      endDate: filters.toDate || undefined,
+    });
+    // Trigger download via fetch so the auth header is included
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.blob())
+      .then(blob => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `NagarSeva_Issues_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`Exported ${filteredIssues.length} issue(s) to CSV`);
+      })
+      .catch(() => toast.error("Failed to export CSV"));
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -164,15 +162,22 @@ const Issues = () => {
     );
   };
 
-  const handleAssignEngineer = (engineerId: string, engineerName: string) => {
+  const handleAssignEngineer = async (engineerId: string, engineerName: string) => {
     if (selectedIssue) {
-      assignEngineer(selectedIssue.id, engineerId, engineerName);
+      const res = await assignEngineer(selectedIssue.id, engineerId, engineerName);
+      if (res && res.success) {
+        toast.success("Engineer assigned successfully");
+        setAssignDialogOpen(false);
+      } else {
+        toast.error(res?.message || "Failed to assign engineer.");
+      }
     }
   };
 
-  const handleVerifyResolution = (approved: boolean, feedback?: string) => {
+  const handleVerifyResolution = async (approved: boolean, feedback?: string) => {
     if (selectedIssue) {
-      verifyResolution(selectedIssue.id, approved, feedback);
+      const res = await verifyResolution(selectedIssue.id, approved, feedback);
+      return res;
     }
   };
 
@@ -209,6 +214,19 @@ const Issues = () => {
                 <List className="w-4 h-4 mr-1" /> Table
               </Button>
             </div>
+
+            {/* Refresh Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refetch}
+              disabled={isLoading}
+              className="flex items-center gap-1.5"
+              title="Refresh issues"
+            >
+              <RefreshCw className={`w-4 h-4 text-blue-500 ${isLoading ? "animate-spin" : ""}`} />
+              {isLoading ? "Refreshing…" : "Refresh"}
+            </Button>
 
             {/* Export CSV Button */}
             <Button

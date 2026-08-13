@@ -20,9 +20,13 @@ async function seedIssues() {
   });
 
   let surveyor = await prisma.user.findFirst({ where: { role: "SURVEYOR" } });
+  if (!surveyor) {
+    console.error("❌ Seed aborted: No SURVEYOR user found. Run the main seed first.");
+    process.exit(1);
+  }
   let assignment = await prisma.routeAssignment.findFirst({ where: { routeId: route.id } }) || await prisma.routeAssignment.create({
     data: {
-      surveyorId: surveyor?.id || "default-surveyor-id",
+      surveyorId: surveyor.id,
       routeId: route.id,
       status: "COMPLETED",
     }

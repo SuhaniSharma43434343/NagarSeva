@@ -27,14 +27,26 @@ adminRouter.post("/login", async (req, res) => {
       const adminExists = await prisma.user.findFirst({ where: { role: "ADMIN" } });
 
       if (!adminExists) {
-        // No admin exists in the whole system, create the first one
-        console.log("No admin found in system. Creating first admin...");
-        let ward = await prisma.ward.findFirst() || await prisma.ward.create({ data: { name: "Alkapuri", number: 1 } });
-        const adminPassword = await bcrypt.hash(password || "admin123", 10);
+        // No admin exists in the whole system, require explicit credentials
+        if (!normalizedEmail || !password) {
+          return res.status(400).json({
+            success: false,
+            message: "No admin account exists. Please provide an email and password to create the first admin account."
+          });
+        }
+        console.log("No admin found in system. Creating first admin account...");
+        let ward = await prisma.ward.findFirst();
+        if (!ward) {
+          return res.status(400).json({
+            success: false,
+            message: "No wards found in the database. Please run the database seed first."
+          });
+        }
+        const adminPassword = await bcrypt.hash(password, 10);
         user = await prisma.user.create({
           data: {
-            name: "Default Admin",
-            email: normalizedEmail || "admin@vmc.gov.in",
+            name: "Admin",
+            email: normalizedEmail,
             password: adminPassword,
             role: "ADMIN",
             wardId: ward.id,
@@ -48,14 +60,7 @@ adminRouter.post("/login", async (req, res) => {
         });
       }
     } else {
-      // User exists, verify role and password
-      if (user.role !== "ADMIN") {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied. User is not an admin."
-        });
-      }
-
+      // User exists, verify password first then role
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         return res.status(401).json({
@@ -63,11 +68,24 @@ adminRouter.post("/login", async (req, res) => {
           message: "Invalid email or password."
         });
       }
+
+      if (user.role !== "ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You do not have permission to use this login."
+        });
+      }
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error("[AUTH] JWT_SECRET environment variable is not set.");
+      return res.status(500).json({ success: false, message: "Server configuration error." });
     }
 
     const token = jwt.sign(
-      { userId: user.id, role: "ADMIN" },
-      process.env.JWT_SECRET || "your_jwt_secret_here",
+      { userId: user.id, role: user.role },
+      jwtSecret,
       { expiresIn: "7d" },
     );
 
@@ -95,16 +113,28 @@ adminRouter.post(
   requireRole("ADMIN"),
   async (req, res) => {
     const { name, email, password, role, wardId } = req.body;
+
+    // Validate required fields before any processing
+    if (!name || !email || !password || !role || !wardId) {
+      return res.status(400).json({
+        success: false,
+        message: "name, email, password, role, and wardId are all required.",
+      });
+    }
+
+    // Enforce that only SURVEYOR and ENGINEER roles can be assigned via this API.
+    // ADMIN accounts cannot be created through employee management.
+    const allowedRoles = ["SURVEYOR", "ENGINEER"];
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role. Only SURVEYOR or ENGINEER can be created via this endpoint.",
+      });
+    }
+
     const hashedPassword = bcrypt.hashSync(password, 10);
 
     try {
-      if (!wardId) {
-        return res.status(400).json({
-          success: false,
-          message: "wardId is required.",
-        });
-      }
-
       const ward = await prisma.ward.findUnique({ where: { id: wardId } });
       if (!ward) {
         return res.status(400).json({
@@ -128,7 +158,8 @@ adminRouter.post(
         data: { name, email, role, password: hashedPassword, wardId },
       });
 
-      return res.json({ success: true, data: newEmployee });
+      const { password: _, ...safeEmployee } = newEmployee;
+      return res.json({ success: true, data: safeEmployee });
     } catch (error) {
       console.error("Error creating employee:", error);
       return res
@@ -153,6 +184,17 @@ adminRouter.put(
           success: false,
           message: "employeeId is required.",
         });
+      }
+
+      // Prevent escalation to ADMIN role via this endpoint
+      if (role !== undefined) {
+        const allowedRoles = ["SURVEYOR", "ENGINEER"];
+        if (!allowedRoles.includes(role)) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid role. Only SURVEYOR or ENGINEER can be assigned.",
+          });
+        }
       }
 
       const employee = await prisma.user.findUnique({
@@ -279,6 +321,13 @@ adminRouter.post(
   async (req, res) => {
     const { surveyorId, routeId } = req.body;
 
+    if (!surveyorId || typeof surveyorId !== "string" || !routeId || typeof routeId !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "surveyorId and routeId are required.",
+      });
+    }
+
     try {
       const user = await prisma.user.findUnique({ where: { id: surveyorId } });
       const route = await prisma.route.findUnique({ where: { id: routeId } });
@@ -286,7 +335,7 @@ adminRouter.post(
       if (!user || user.role !== "SURVEYOR") {
         return res
           .status(400)
-          .json({ success: false, message: "Invalid surveyor ID." });
+          .json({ success: false, message: "Invalid surveyor ID or user is not a surveyor." });
       }
 
       if (!route) {
@@ -295,18 +344,57 @@ adminRouter.post(
           .json({ success: false, message: "Invalid route ID." });
       }
 
-      const routeAssigned = await prisma.routeAssignment.create({
-        data: {
+      // Prevent duplicate active assignment for the same surveyor+route
+      const existingActive = await prisma.routeAssignment.findFirst({
+        where: {
           surveyorId,
           routeId,
+          status: { in: ["PENDING", "IN_PROGRESS"] },
         },
       });
 
-      return res.json({
+      if (existingActive) {
+        return res.status(409).json({
+          success: false,
+          message: "Surveyor is already assigned to this route.",
+        });
+      }
+
+      // Execute atomic transaction for race condition protection
+      const routeAssigned = await prisma.$transaction(async (tx) => {
+        const inTxActive = await tx.routeAssignment.findFirst({
+          where: {
+            surveyorId,
+            routeId,
+            status: { in: ["PENDING", "IN_PROGRESS"] },
+          },
+        });
+
+        if (inTxActive) {
+          throw new Error("ACTIVE_ASSIGNMENT_EXISTS");
+        }
+
+        return await tx.routeAssignment.create({
+          data: {
+            surveyorId,
+            routeId,
+            status: "PENDING",
+          },
+        });
+      });
+
+      return res.status(200).json({
         success: true,
         message: "Route assigned successfully.",
+        data: routeAssigned,
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message === "ACTIVE_ASSIGNMENT_EXISTS" || error?.code === "P2002") {
+        return res.status(409).json({
+          success: false,
+          message: "Surveyor is already assigned to this route.",
+        });
+      }
       console.error("Error assigning route:", error);
       return res
         .status(500)
@@ -513,6 +601,13 @@ adminRouter.post(
   async (req, res) => {
     const { engineerId, issueId } = req.body;
 
+    if (!engineerId || typeof engineerId !== "string" || !issueId || typeof issueId !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "engineerId and issueId are required.",
+      });
+    }
+
     try {
       const issue = await prisma.issue.findUnique({ where: { id: issueId } });
       const engineer = await prisma.user.findUnique({
@@ -528,28 +623,68 @@ adminRouter.post(
       if (!engineer || engineer.role !== "ENGINEER") {
         return res
           .status(400)
-          .json({ success: false, message: "Invalid engineer ID." });
+          .json({ success: false, message: "Invalid engineer ID or user is not an engineer." });
       }
 
-      const issueAssigned = await prisma.issueAssignment.create({
-        data: {
-          issueId,
-          engineerId,
-        },
+      // Reject assignments for terminal issue states (RESOLVED, REJECTED)
+      if (["RESOLVED", "REJECTED"].includes(issue.status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot assign engineer to an issue that is ${issue.status.toLowerCase()}.`,
+        });
+      }
+
+      // Check if an active assignment already exists for this issue
+      const existingAssignment = await prisma.issueAssignment.findFirst({
+        where: { issueId },
       });
 
-      await prisma.issue.update({
-        where: { id: issueId },
-        data: {
-          status: "ASSIGNED",
-        },
+      if (existingAssignment || ["ASSIGNED", "IN_PROGRESS", "FIXED"].includes(issue.status)) {
+        return res.status(409).json({
+          success: false,
+          message: "This issue is already assigned to an engineer.",
+        });
+      }
+
+      // Execute atomic transaction for assignment creation and issue status update
+      await prisma.$transaction(async (tx) => {
+        const inTxIssue = await tx.issue.findUnique({ where: { id: issueId } });
+        if (!inTxIssue || ["RESOLVED", "REJECTED"].includes(inTxIssue.status)) {
+          throw new Error("TERMINAL_STATUS");
+        }
+
+        const inTxAssignment = await tx.issueAssignment.findFirst({ where: { issueId } });
+        if (inTxAssignment || ["ASSIGNED", "IN_PROGRESS", "FIXED"].includes(inTxIssue.status)) {
+          throw new Error("ALREADY_ASSIGNED");
+        }
+
+        await tx.issueAssignment.create({
+          data: { issueId, engineerId },
+        });
+
+        await tx.issue.update({
+          where: { id: issueId },
+          data: { status: "ASSIGNED" },
+        });
       });
 
-      return res.json({
+      return res.status(200).json({
         success: true,
         message: "Solver assigned successfully.",
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message === "ALREADY_ASSIGNED" || error?.code === "P2002") {
+        return res.status(409).json({
+          success: false,
+          message: "This issue is already assigned to an engineer.",
+        });
+      }
+      if (error?.message === "TERMINAL_STATUS") {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot assign engineer to an issue that is resolved or rejected.",
+        });
+      }
       console.error("Error assigning solver:", error);
       return res
         .status(500)
@@ -581,6 +716,7 @@ adminRouter.put(
           issueId,
           approved: resolution === "APPROVED" ? true : false,
           feedback: feedback || null,
+          verifiedByAdminId: req.user!.userId,
         },
       });
 
@@ -815,10 +951,9 @@ adminRouter.get(
           type: issue.type,
           status: issue.status,
           confidence: issue.confidence,
-          wardId: issue.wardId,
-          wardName: issue.ward?.name || "Unknown Ward",
+          wardName: issue.ward?.name || "Outside Coverage Area",
           routeId: issue.routeId,
-          routeName: issue.route?.name || "Unknown Route",
+          routeName: issue.route?.name || "Unassigned Route",
           latitude: issue.latitude,
           longitude: issue.longitude,
           imageUrl: issue.imageUrl,
@@ -1350,7 +1485,7 @@ adminRouter.get(
         return {
           wardId: ward.id,
           wardName: ward.name,
-          wardCode: `W${ward.number.toString().padStart(2, "0")}`,
+          wardCode: `W${(ward.number ?? 0).toString().padStart(2, "0")}`,
           openPotholes: potholeCount,
           openGarbage: garbageCount,
           vulnerabilityScore: score,

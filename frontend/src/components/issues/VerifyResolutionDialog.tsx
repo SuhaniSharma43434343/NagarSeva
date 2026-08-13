@@ -12,7 +12,7 @@ interface VerifyResolutionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   issue: Issue | null;
-  onVerify: (approved: boolean, feedback?: string) => void;
+  onVerify: (approved: boolean, feedback?: string) => Promise<{ success: boolean; message?: string } | void>;
 }
 
 export const VerifyResolutionDialog = ({
@@ -22,12 +22,24 @@ export const VerifyResolutionDialog = ({
   onVerify,
 }: VerifyResolutionDialogProps) => {
   const [feedback, setFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleVerify = (approved: boolean) => {
-    onVerify(approved, feedback);
-    toast.success(approved ? 'Issue closed successfully' : 'Issue sent back for rework');
-    onOpenChange(false);
-    setFeedback('');
+  const handleVerify = async (approved: boolean) => {
+    setIsSubmitting(true);
+    try {
+      const res = await onVerify(approved, feedback);
+      if (res && (res as any).success === false) {
+        toast.error((res as any).message || 'Failed to verify resolution');
+        return;
+      }
+      toast.success(approved ? 'Issue closed successfully' : 'Issue sent back for rework');
+      onOpenChange(false);
+      setFeedback('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to verify resolution');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!issue) return null;
@@ -69,18 +81,20 @@ export const VerifyResolutionDialog = ({
           <div className="flex gap-3">
             <Button
               onClick={() => handleVerify(true)}
+              disabled={isSubmitting}
               className="flex-1 bg-chart-1 hover:bg-chart-1/90"
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              Approve & Close
+              {isSubmitting ? 'Processing...' : 'Approve & Close'}
             </Button>
             <Button
               onClick={() => handleVerify(false)}
+              disabled={isSubmitting}
               variant="destructive"
               className="flex-1"
             >
               <XCircle className="w-4 h-4 mr-2" />
-              Reject
+              {isSubmitting ? 'Processing...' : 'Reject'}
             </Button>
           </div>
         </div>

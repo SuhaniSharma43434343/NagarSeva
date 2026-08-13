@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { prisma } from "../lib/prisma.js";
+import { findWardByCoordinates } from "../services/wardLocationService.js";
+import { findRouteByCoordinates } from "../services/routeLocationService.js";
 const surveyorRouter = Router();
 import dotenv from "dotenv";
 import { v2 as cloudinary } from "cloudinary";
@@ -19,6 +21,18 @@ cloudinary.config({
   api_key: process.env.cloudinary_api_key || "",
   api_secret: process.env.cloudinary_api_secret || "",
 });
+
+function hasValidCloudinaryConfig(): boolean {
+  const cloudName = process.env.cloudinary_cloud_name;
+  const apiKey = process.env.cloudinary_api_key;
+  return Boolean(
+    cloudName &&
+    !cloudName.includes("your_") &&
+    cloudName.trim().length > 0 &&
+    apiKey &&
+    !apiKey.includes("your_")
+  );
+}
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -83,46 +97,34 @@ async function processImage(
   lon?: number
 ) {
   const imagePath = file.path;
-  console.log("uploading image");
-  console.log("Received GPS - lat:", lat, "lon:", lon);
+  console.log("[processImage] Processing image:", file.filename);
+  console.log("[processImage] Received GPS - lat:", lat, "lon:", lon);
 
-  let latitude = lat;
-  let longitude = lon;
+  const latitude = lat ?? null;
+  const longitude = lon ?? null;
 
-  // If GPS not provided, use route coordinates as fallback
-  if (!latitude || !longitude) {
-    console.log("GPS not provided, fetching route coordinates for routeId:", routeId);
-    const route = await prisma.route.findUnique({
-      where: { id: routeId },
-    });
-    if (route) {
-      // Use route start coordinates with slight random offset for variety
-      latitude = randomAround(route.startLat, 50);
-      longitude = randomAround(route.startLon, 50);
-      console.log("Using route coordinates as fallback:", latitude, longitude, "from route:", route.name);
-    } else {
-      // Final fallback to base coordinates
-      latitude = randomAround(BASE_LAT, 20);
-      longitude = randomAround(BASE_LON, 20);
-      console.log("Using base coordinates as fallback:", latitude, longitude);
-    }
+  // If GPS not provided, log clearly — do NOT silently replace with random/fallback coordinates
+  if (latitude === null || longitude === null) {
+    console.warn("[processImage] WARNING: No GPS coordinates provided for", file.filename, "— issue will be created with null lat/lng. Check mobile GPS pipeline.");
   } else {
-    console.log("Using provided GPS coordinates:", latitude, longitude);
+    console.log(`[processImage] Using provided GPS coordinates: lat=${latitude}, lon=${longitude}`);
   }
 
   try {
     const jpegData = await fs.promises.readFile(imagePath, "binary");
-    const exifObj = {
+    const exifObj = latitude !== null && longitude !== null ? {
       GPS: {
         [piexif.GPSIFD.GPSLatitudeRef]: latitude >= 0 ? "N" : "S",
         [piexif.GPSIFD.GPSLatitude]: degToDmsRational(latitude),
         [piexif.GPSIFD.GPSLongitudeRef]: longitude >= 0 ? "E" : "W",
         [piexif.GPSIFD.GPSLongitude]: degToDmsRational(longitude),
       },
-    };
-    const exifBytes = piexif.dump(exifObj);
-    const newJpegData = piexif.insert(exifBytes, jpegData);
-    await fs.promises.writeFile(imagePath, Buffer.from(newJpegData, "binary"));
+    } : {};
+    if (latitude !== null && longitude !== null) {
+      const exifBytes = piexif.dump(exifObj);
+      const newJpegData = piexif.insert(exifBytes, jpegData);
+      await fs.promises.writeFile(imagePath, Buffer.from(newJpegData, "binary"));
+    }
   } catch (exifErr) {
     console.warn("Exif insertion skipped/failed:", exifErr);
   }
@@ -137,27 +139,33 @@ async function processImage(
   }
 
   // Upload original raw photo clicked by surveyor to Cloudinary (or fallback to local server path)
-  try {
-    const uploadResult = await cloudinary.uploader.upload(imagePath, {
-      folder: "pothole-detections",
-      quality: "auto",
-      fetch_format: "auto",
-    });
-    finalImageUrl = uploadResult.url;
-  } catch (cErr) {
+  if (hasValidCloudinaryConfig()) {
+    try {
+      const uploadResult = await cloudinary.uploader.upload(imagePath, {
+        folder: "pothole-detections",
+        quality: "auto",
+        fetch_format: "auto",
+      });
+      finalImageUrl = uploadResult.url;
+    } catch (cErr) {
+      finalImageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+    }
+  } else {
     finalImageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
   }
 
   if (!finalImageUrl) {
-    finalImageUrl = "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80";
+    // Image file exists on disk but URL was not set - use local server path as final fallback
+    finalImageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+    console.warn(`[processImage] Using local server path as image URL: ${finalImageUrl}`);
   }
 
-  console.log("Creating issue in database with image URL:", finalImageUrl);
+  console.log(`[processImage] PRE-CREATE: lat=${latitude ?? 'NULL'}, lng=${longitude ?? 'NULL'}, wardId=${wardId ?? 'NULL'}, routeId=${routeId ?? 'NULL'}, imageUrl=${finalImageUrl}`);
 
   const issue = await prisma.issue.create({
     data: {
-      latitude,
-      longitude,
+      latitude: latitude as any,
+      longitude: longitude as any,
       type: "POTHOLE",
       status: engineerId ? "ASSIGNED" : "DETECTED",
       wardId,
@@ -166,6 +174,24 @@ async function processImage(
       imageUrl: finalImageUrl,
     },
   });
+
+  console.log(`[processImage] POST-CREATE: issue.id=${issue.id}, issue.lat=${issue.latitude}, issue.lng=${issue.longitude}`);
+
+  // DB round-trip verification — read back and compare
+  try {
+    const dbCheck = await prisma.issue.findUnique({ where: { id: issue.id } });
+    if (dbCheck) {
+      const latMatch = dbCheck.latitude === issue.latitude;
+      const lngMatch = dbCheck.longitude === issue.longitude;
+      if (latMatch && lngMatch) {
+        console.log(`[processImage] DB round-trip VERIFIED ✓ id=${issue.id} lat=${dbCheck.latitude} lng=${dbCheck.longitude}`);
+      } else {
+        console.error(`[processImage] DB round-trip MISMATCH! id=${issue.id} sent lat=${issue.latitude}/lng=${issue.longitude} but DB has lat=${dbCheck.latitude}/lng=${dbCheck.longitude}`);
+      }
+    }
+  } catch (verifyErr) {
+    console.warn("[processImage] DB round-trip verify failed:", verifyErr);
+  }
 
   if (engineerId) {
     await prisma.issueAssignment.create({
@@ -181,9 +207,9 @@ surveyorRouter.post("/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
   console.log("login");
   if (!email || !password) {
-    return res.json({
+    return res.status(400).json({
       success: false,
-      message: "username or password not found",
+      message: "Email and password are required.",
     });
   }
 
@@ -198,18 +224,27 @@ surveyorRouter.post("/login", async (req: Request, res: Response) => {
     if (!user)
       return res
         .status(401)
-        .json({ success: false, message: "invalid credentials" });
+        .json({ success: false, message: "Invalid email or password." });
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid)
       return res
         .status(401)
-        .json({ success: false, message: "invalid credentials" });
+        .json({ success: false, message: "Invalid email or password." });
 
-    const secret = process.env.JWT_SECRET || "your_jwt_secret_here";
+    if (user.role !== "SURVEYOR") {
+      return res
+        .status(403)
+        .json({ success: false, message: "Access denied. You do not have permission to use this login." });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res.status(500).json({ success: false, message: 'Server configuration error.' });
+    }
     const token = jwt.sign(
       { userId: user.id, role: user.role },
-      secret,
+      jwtSecret,
       { expiresIn: "7d" },
     );
 
@@ -270,6 +305,7 @@ surveyorRouter.post(
   requireRole("SURVEYOR"),
   async (req: Request, res: Response) => {
     const { routeAssignmentId, startedAt } = req.body;
+    const authenticatedSurveyorId = req.user!.userId;
 
     if (!routeAssignmentId || !startedAt) {
       return res.json({
@@ -278,35 +314,22 @@ surveyorRouter.post(
       });
     }
     try {
-      let assignmentExists = await prisma.routeAssignment.findUnique({
+      const assignmentExists = await prisma.routeAssignment.findUnique({
         where: { id: routeAssignmentId },
       });
 
       if (!assignmentExists) {
-        let route = await prisma.route.findFirst();
-        if (!route) {
-          let ward = await prisma.ward.findFirst() || await prisma.ward.create({ data: { name: "Ward 3", number: 3 } });
-          route = await prisma.route.create({
-            data: {
-              name: "Demo Road Patrol Corridor",
-              wardId: ward.id,
-              startLat: 22.2873,
-              startLon: 73.3616,
-              endLat: 22.2950,
-              endLon: 73.3700,
-              distance: 3.2,
-            },
-          });
-        }
+        return res.status(404).json({
+          success: false,
+          message: "Route assignment not found. Please select a valid assignment from your dashboard.",
+        });
+      }
 
-        const surveyor = await prisma.user.findFirst({ where: { role: "SURVEYOR" } });
-        assignmentExists = await prisma.routeAssignment.create({
-          data: {
-            id: routeAssignmentId,
-            routeId: route.id,
-            surveyorId: surveyor?.id || req.user?.userId || "default-surveyor-id",
-            status: "IN_PROGRESS",
-          },
+      // Verify the assignment belongs to the authenticated surveyor
+      if (assignmentExists.surveyorId !== authenticatedSurveyorId) {
+        return res.status(403).json({
+          success: false,
+          message: "You do not have permission to start a survey for this assignment.",
         });
       }
 
@@ -317,14 +340,14 @@ surveyorRouter.post(
         },
       });
 
-      res
+      return res
         .status(200)
         .json({ success: true, surverySessionId: surverySession.id });
     } catch (e) {
       console.error("startSurvey error:", e);
-      res
-        .status(200)
-        .json({ success: true, surverySessionId: `session-${Date.now()}` });
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to start survey session." });
     }
   },
 );
@@ -403,27 +426,28 @@ surveyorRouter.post(
         return res.status(400).json({ success: false, message: "No valid survey session found" });
       }
 
-      // Validate and get correct routeId and wardId from routeAssignment
-      let targetRouteId = routeId;
-      let targetWardId = wardId;
+    // Use GPS coordinates for geographic ward and route detection (not routeAssignment)
+    const latNum = parseFloat(latitude ? latitude.toString() : "");
+    const lonNum = parseFloat(longitude ? longitude.toString() : "");
+    const hasValidGps = Number.isFinite(latNum) && Number.isFinite(lonNum) && latNum !== 0 && lonNum !== 0;
 
-      if (routeAssignmentId) {
-        const assignment = await prisma.routeAssignment.findUnique({
-          where: { id: routeAssignmentId },
-          include: { route: true },
-        });
-        if (assignment && assignment.route) {
-          // Use routeAssignment's route as source of truth
-          targetRouteId = assignment.routeId;
-          targetWardId = assignment.route.wardId;
-          console.log("Using routeId and wardId from routeAssignment:", targetRouteId, targetWardId);
-        }
-      }
+    console.log(`[UPLOAD] lat=${latitude} lng=${longitude}`);
 
-      if (!targetRouteId || !targetWardId) {
-        console.error("Missing routeId or wardId. Provided routeId:", routeId, "wardId:", wardId);
-        return res.status(400).json({ success: false, message: "Missing routeId or wardId" });
-      }
+    let targetWardId: string | null = null;
+    let targetRouteId: string | null = null;
+
+    if (hasValidGps) {
+      console.log(`[BACKEND] lat=${latNum} lng=${lonNum}`);
+      const matchedWard = await findWardByCoordinates(latNum, lonNum);
+      targetWardId = matchedWard ? matchedWard.wardId : null;
+      console.log(`[WARD] matched ward=${matchedWard?.wardName || 'null'} (${targetWardId || 'null'})`);
+
+      const matchedRoute = await findRouteByCoordinates(latNum, lonNum, targetWardId);
+      targetRouteId = matchedRoute ? matchedRoute.routeId : null;
+      console.log(`[ROUTE] matched route=${matchedRoute?.routeName || 'null'} (${targetRouteId || 'null'})`);
+    } else {
+      console.warn(`[UPLOAD] No valid GPS coordinates provided - ward and route will be unassigned.`);
+    }
 
       res.status(202).json({
         success: true,
@@ -475,51 +499,21 @@ surveyorRouter.post(
 
 surveyorRouter.post(
   "/reportDetection",
+  requireAuth,
+  requireRole("SURVEYOR"),
   upload.single("photo"),
   async (req, res) => {
-    const { routeId, wardId, surverySessionId, routeAssignmentId, latitude, longitude, confidence } = req.body;
-    console.log("📸 Single Pothole Detection Report received:", { routeId, wardId, surverySessionId, latitude, longitude, confidence });
+    const { detectionId, routeId, wardId, surverySessionId, routeAssignmentId, latitude, longitude, confidence, accuracy, capturedAt } = req.body;
+    console.log(`[BACKEND] Detection ID=${detectionId || 'N/A'} Raw latitude=${latitude} Raw longitude=${longitude} Raw accuracy=${accuracy} Raw capturedAt=${capturedAt}`);
 
     try {
-      let targetWardId = wardId;
-      let targetRouteId = routeId;
+      let targetWardId: string | null = null;
+      let targetRouteId: string | null = null;
       let targetSessionId = surverySessionId;
 
-      let routeExists = targetRouteId ? await prisma.route.findFirst({
-        where: { OR: [{ id: targetRouteId }, { name: { contains: "Demo Road" } }] },
-        include: { ward: true },
-      }) : null;
-
-      if (!routeExists) {
-        let demoWard = await prisma.ward.findFirst({ where: { name: { contains: "Demo" } } })
-          || await prisma.ward.findFirst()
-          || await prisma.ward.create({ data: { name: "Ward 5 - Waghodia Road", number: 5 } });
-        routeExists = await prisma.route.create({
-          data: {
-            name: "Demo Road Patrol Corridor",
-            wardId: demoWard.id,
-            startLat: 22.2873,
-            startLon: 73.3616,
-            endLat: 22.2950,
-            endLon: 73.3700,
-            distance: 3.2,
-          },
-          include: { ward: true },
-        });
-      }
-
-      targetRouteId = routeExists.id;
-      targetWardId = routeExists.wardId;
-
-      let sessionExists = targetSessionId ? await prisma.surveySession.findUnique({ where: { id: targetSessionId } }) : null;
-      if (!sessionExists) {
-        let assignment = await prisma.routeAssignment.findFirst({ where: { routeId: targetRouteId } });
-        if (!assignment) {
-          const surveyor = await prisma.user.findFirst({ where: { role: "SURVEYOR" } });
-          assignment = await prisma.routeAssignment.create({ data: { surveyorId: surveyor?.id || "default-surveyor-id", routeId: targetRouteId, status: "IN_PROGRESS" } });
-        }
-        const newSession = await prisma.surveySession.create({ data: { routeAssignmentId: assignment.id, startedAt: new Date().toISOString() } });
-        targetSessionId = newSession.id;
+      // surveySessionId is optional for direct photo detections; allow null
+      if (!targetSessionId) {
+        console.warn(`[BACKEND] No surverySessionId provided - issue will be created without session link.`);
       }
 
       // Start with no imageUrl - we'll determine it below
@@ -527,16 +521,20 @@ surveyorRouter.post(
 
       if (req.file) {
         const imagePath = req.file.path;
-        try {
-          const uploadResult = await cloudinary.uploader.upload(imagePath, {
-            folder: "pothole-detections",
-            quality: "auto",
-            fetch_format: "auto",
-          });
-          imageUrl = uploadResult.url;
-          console.log("✅ Image uploaded to Cloudinary:", imageUrl);
-        } catch (cloudErr) {
-          console.warn("Cloudinary upload failed, using local server path:", cloudErr);
+        if (hasValidCloudinaryConfig()) {
+          try {
+            const uploadResult = await cloudinary.uploader.upload(imagePath, {
+              folder: "pothole-detections",
+              quality: "auto",
+              fetch_format: "auto",
+            });
+            imageUrl = uploadResult.url;
+            console.log("✅ Image uploaded to Cloudinary:", imageUrl);
+          } catch (cloudErr) {
+            console.warn("Cloudinary upload failed, using local server path:", cloudErr);
+            imageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+          }
+        } else {
           imageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
         }
       } else if (req.body.photoData && typeof req.body.photoData === "string" && req.body.photoData.length > 50) {
@@ -545,46 +543,75 @@ surveyorRouter.post(
           const filename = `uploads/user-images/realtime-${Date.now()}-${Math.floor(Math.random()*1000)}.jpg`;
           await fs.promises.writeFile(filename, Buffer.from(rawB64, "base64"));
 
-          try {
-            const uploadResult = await cloudinary.uploader.upload(filename, {
-              folder: "pothole-detections",
-              quality: "auto",
-              fetch_format: "auto",
-            });
-            imageUrl = uploadResult.url;
-          } catch (cloudErr) {
-            // Store base64 data URI so Admin dashboard renders the exact real photo clicked by the camera
-            const formattedB64 = req.body.photoData.startsWith("data:")
-              ? req.body.photoData
-              : `data:image/jpeg;base64,${req.body.photoData}`;
-            imageUrl = formattedB64;
+          if (hasValidCloudinaryConfig()) {
+            try {
+              const uploadResult = await cloudinary.uploader.upload(filename, {
+                folder: "pothole-detections",
+                quality: "auto",
+                fetch_format: "auto",
+              });
+              imageUrl = uploadResult.url;
+            } catch (cloudErr) {
+              imageUrl = `http://localhost:3000/${filename.replace(/\\/g, "/")}`;
+            }
+          } else {
+            imageUrl = `http://localhost:3000/${filename.replace(/\\/g, "/")}`;
           }
-          console.log("✅ Saved real-time photo for Issue");
+          console.log("✅ Saved real-time photo to file and URL:", imageUrl);
         } catch (b64Err) {
           console.error("Failed to save base64 photoData:", b64Err);
-          if (req.body.photoData.length > 50) {
-            imageUrl = req.body.photoData.startsWith("data:")
-              ? req.body.photoData
-              : `data:image/jpeg;base64,${req.body.photoData}`;
-          }
+          return res.status(400).json({ success: false, message: "Failed to process the provided photo data." });
         }
       } else if (req.body.photoUri && (req.body.photoUri.startsWith("http") || req.body.photoUri.startsWith("data:"))) {
         imageUrl = req.body.photoUri;
       }
 
-      // Final fallback: use a real pothole placeholder image
+      // Reject if no image was provided or saved
       if (!imageUrl) {
-        imageUrl = "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80";
+        return res.status(400).json({ success: false, message: "No photo was provided with this detection report." });
       }
 
-      const parsedLat = parseFloat(latitude) || BASE_LAT;
-      const parsedLon = parseFloat(longitude) || BASE_LON;
+      const numLat = parseFloat(latitude);
+      const numLon = parseFloat(longitude);
+
+      console.log(`[UPLOAD] lat=${latitude} lng=${longitude}`);
+
+      if (!Number.isFinite(numLat) || numLat < -90 || numLat > 90 ||
+          !Number.isFinite(numLon) || numLon < -180 || numLon > 180 ||
+          (numLat === 0 && numLon === 0)) {
+        console.warn(`[BACKEND] Rejected invalid/missing coordinates: latitude=${latitude}, longitude=${longitude}`);
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or missing GPS coordinates. Latitude must be between -90 and 90 and Longitude between -180 and 180.",
+        });
+      }
+
+      console.log(`[BACKEND] lat=${numLat} lng=${numLon}`);
+
+      // 1. Geographically detect Ward strictly from pothole coordinates using Ward Location Service
+      const matchedWard = await findWardByCoordinates(numLat, numLon);
+      targetWardId = matchedWard ? matchedWard.wardId : null;
+      console.log(`[WARD] matched ward=${matchedWard?.wardName || 'null'} (${targetWardId || 'null'})`);
+
+      // 2. Geographically detect Route strictly from pothole coordinates using Route Location Service
+      const matchedRoute = await findRouteByCoordinates(numLat, numLon, targetWardId);
+      targetRouteId = matchedRoute ? matchedRoute.routeId : null;
+      console.log(`[ROUTE] matched route=${matchedRoute?.routeName || 'null'} (${targetRouteId || 'null'})`);
+
+      const accuracyNum = req.body.accuracy ? parseFloat(req.body.accuracy) : null;
+      const parsedAccuracy = Number.isFinite(accuracyNum) ? accuracyNum : null;
+      const parsedCapturedAt = req.body.capturedAt && !isNaN(Date.parse(req.body.capturedAt))
+        ? new Date(req.body.capturedAt)
+        : new Date();
+
       const parsedConf = parseFloat(confidence) || 0.88;
 
       const issue = await prisma.issue.create({
         data: {
-          latitude: parsedLat,
-          longitude: parsedLon,
+          latitude: numLat,
+          longitude: numLon,
+          gpsAccuracy: parsedAccuracy,
+          capturedAt: parsedCapturedAt,
           type: "POTHOLE",
           status: "DETECTED",
           confidence: parsedConf,
@@ -594,6 +621,15 @@ surveyorRouter.post(
           imageUrl,
         },
       });
+
+      console.log(`[DATABASE] saved lat=${issue.latitude} lng=${issue.longitude} wardId=${issue.wardId} routeId=${issue.routeId}`);
+
+      // Verify the saved coordinates match what we received
+      if (Math.abs(issue.latitude - numLat) > 0.000001 || Math.abs(issue.longitude - numLon) > 0.000001) {
+        console.error(`[DATABASE] Detection ID=${detectionId || 'N/A'} COORDINATE MISMATCH! Received: lat=${numLat}, lng=${numLon}. Saved: lat=${issue.latitude}, lng=${issue.longitude}`);
+      } else {
+        console.log(`[DATABASE] Detection ID=${detectionId || 'N/A'} Coordinates verified: lat=${issue.latitude}, lng=${issue.longitude} match received values`);
+      }
 
       console.log("✅ New Image & Coordinates saved to DB for Issue:", issue.id);
 
@@ -658,35 +694,24 @@ surveyorRouter.post(
   requireAuth,
   requireRole("SURVEYOR"),
   async (req: Request, res: Response) => {
-    const { surveyorId } = req.body;
-    const targetId = surveyorId || req.user?.userId;
-    if (!targetId) {
-      return res.json({ success: false, message: "surveyorId not found" });
-    }
-    console.log("Assignments request for targetId:", targetId);
+    // Always use the JWT identity — never trust surveyorId from request body
+    // to prevent one surveyor from fetching another surveyor's assignments.
+    const authenticatedSurveyorId = req.user!.userId;
+
+    console.log("Assignments request for authenticated userId:", authenticatedSurveyorId);
 
     try {
-      let surveyor = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { id: targetId },
-            { email: targetId },
-          ],
-        },
+      const surveyor = await prisma.user.findUnique({
+        where: { id: authenticatedSurveyorId },
       });
 
-      if (!surveyor && req.user?.userId) {
-        surveyor = await prisma.user.findUnique({
-          where: { id: req.user.userId },
-        });
+      if (!surveyor || surveyor.role !== "SURVEYOR") {
+        return res.status(403).json({ success: false, message: "Access denied." });
       }
 
-      if (!surveyor) {
-        return res.status(404).json({ success: false, message: "Surveyor not found." });
-      }
       let assignments = await prisma.routeAssignment.findMany({
         where: {
-          surveyorId: surveyor.id,
+          surveyorId: authenticatedSurveyorId,
         },
         include: {
           route: {
@@ -702,101 +727,12 @@ surveyorRouter.post(
         },
       });
 
-      if (assignments.length === 0) {
-        assignments = await prisma.routeAssignment.findMany({
-          include: {
-            route: { include: { ward: true } },
-            sessions: { include: { issues: true } },
-          },
-        });
-      }
-
-      if (assignments.length === 0) {
-        let demoRoute = await prisma.route.findFirst({
-          where: { name: { contains: "Demo Road" } },
-          include: { ward: true },
-        });
-
-        let waghodiaRoute = await prisma.route.findFirst({
-          where: { name: { contains: "Waghodia" } },
-          include: { ward: true },
-        });
-
-        if (!demoRoute || !waghodiaRoute) {
-          let ward = await prisma.ward.findFirst();
-          if (!ward) {
-            ward = await prisma.ward.create({
-              data: {
-                name: "Ward 5 - Waghodia Road",
-                number: 5,
-              },
-            });
-          }
-
-          if (!demoRoute) {
-            demoRoute = await prisma.route.create({
-              data: {
-                name: "Demo Road Patrol Corridor",
-                wardId: ward.id,
-                startLat: 22.2873,
-                startLon: 73.3616,
-                endLat: 22.2950,
-                endLon: 73.3700,
-                distance: 3.2,
-              },
-              include: { ward: true },
-            });
-          }
-
-          if (!waghodiaRoute) {
-            waghodiaRoute = await prisma.route.create({
-              data: {
-                name: "Waghodia Road Patrol Route",
-                wardId: ward.id,
-                startLat: 22.2965,
-                startLon: 73.2185,
-                endLat: 22.2852,
-                endLon: 73.2450,
-                distance: 4.5,
-              },
-              include: { ward: true },
-            });
-          }
-        }
-
-        const assign1 = await prisma.routeAssignment.create({
-          data: {
-            surveyorId: surveyor.id,
-            routeId: demoRoute.id,
-            status: "PENDING",
-          },
-          include: {
-            route: { include: { ward: true } },
-            sessions: { include: { issues: true } },
-          },
-        });
-
-        const assign2 = await prisma.routeAssignment.create({
-          data: {
-            surveyorId: surveyor.id,
-            routeId: waghodiaRoute.id,
-            status: "IN_PROGRESS",
-          },
-          include: {
-            route: { include: { ward: true } },
-            sessions: { include: { issues: true } },
-          },
-        });
-
-        assignments = [assign1, assign2];
-      }
-
-      res.status(200).json({ success: true, assignments });
-    } catch (e) {
-      console.error(e);
+      return res.status(200).json({ success: true, assignments });
+    } catch (err) {
+      console.error("GET /assignments error:", err);
       return res
         .status(500)
-        .json({ success: false, message: "internal server error" });
+        .json({ success: false, message: "Internal server error." });
     }
   },
 );

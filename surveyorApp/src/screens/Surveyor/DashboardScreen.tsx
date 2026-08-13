@@ -65,62 +65,25 @@ export default function DashboardScreen() {
                 if (len > 0) {
                     offlineQueue.syncQueue(async (item) => {
                         try {
-                            await api.uploadFrames(item.frames, item.routeId, item.wardId, item.surveySessionId, item.assignmentId);
-                            return true;
+                            await api.uploadFrames(item.frames, item.routeId, item.wardId, item.surveySessionId, item.assignmentId, item.latitude, item.longitude);
+                            return { success: true };
                         } catch {
-                            return false;
+                            return { success: false };
                         }
                     }).then(res => setOfflineCount(res.remaining));
                 }
             });
 
-            const response = await api.getAssignments(user?.id || 'default-surveyor-id');
-            let list = (response && response.assignments && response.assignments.length > 0) ? response.assignments : [
-                {
-                    id: 'assignment-demo-road-1',
-                    routeId: 'route-demo-road-1',
-                    surveyorId: user?.id || 'default-surveyor-id',
-                    assignedAt: new Date().toISOString(),
-                    status: 'PENDING',
-                    route: {
-                        id: 'route-demo-road-1',
-                        name: 'Demo Road Patrol Corridor',
-                        wardId: 'ward-demo-1',
-                        startLat: 22.2873,
-                        startLon: 73.3616,
-                        endLat: 22.2950,
-                        endLon: 73.3700,
-                        distance: 3.2,
-                        ward: {
-                            id: 'ward-demo-1',
-                            name: 'Ward 5 - Waghodia Road',
-                            city: 'Vadodara',
-                        },
-                    },
-                },
-                {
-                    id: 'assignment-waghodia-2',
-                    routeId: 'route-waghodia-2',
-                    surveyorId: user?.id || 'default-surveyor-id',
-                    assignedAt: new Date().toISOString(),
-                    status: 'IN_PROGRESS',
-                    route: {
-                        id: 'route-waghodia-2',
-                        name: 'Waghodia Road Patrol Route',
-                        wardId: 'ward-waghodia-5',
-                        startLat: 22.2965,
-                        startLon: 73.2185,
-                        endLat: 22.2852,
-                        endLon: 73.2450,
-                        distance: 4.5,
-                        ward: {
-                            id: 'ward-waghodia-5',
-                            name: 'Ward 5 - Waghodia Road',
-                            city: 'Vadodara',
-                        },
-                    },
-                },
-            ];
+            if (!user?.id) {
+                setError('Not authenticated. Please log in again.');
+                setAssignments([]);
+                return;
+            }
+
+            const response = await api.getAssignments(user.id);
+            const list = (response && response.assignments && Array.isArray(response.assignments))
+                ? response.assignments
+                : [];
 
             const updatedList = await Promise.all(
                 list.map(async (a: any) => {
@@ -134,54 +97,9 @@ export default function DashboardScreen() {
             setAssignments(updatedList);
             setError(null);
         } catch (err) {
-            console.error('Assignments load notice (using fallback):', err);
-            setAssignments([
-                {
-                    id: 'assignment-demo-road-1',
-                    routeId: 'route-demo-road-1',
-                    surveyorId: user?.id || 'default-surveyor-id',
-                    assignedAt: new Date().toISOString(),
-                    status: 'PENDING',
-                    route: {
-                        id: 'route-demo-road-1',
-                        name: 'Demo Road Patrol Corridor',
-                        wardId: 'ward-demo-1',
-                        startLat: 22.2873,
-                        startLon: 73.3616,
-                        endLat: 22.2950,
-                        endLon: 73.3700,
-                        distance: 3.2,
-                        ward: {
-                            id: 'ward-demo-1',
-                            name: 'Ward 5 - Waghodia Road',
-                            city: 'Vadodara',
-                        },
-                    },
-                },
-                {
-                    id: 'assignment-waghodia-2',
-                    routeId: 'route-waghodia-2',
-                    surveyorId: user?.id || 'default-surveyor-id',
-                    assignedAt: new Date().toISOString(),
-                    status: 'IN_PROGRESS',
-                    route: {
-                        id: 'route-waghodia-2',
-                        name: 'Waghodia Road Patrol Route',
-                        wardId: 'ward-waghodia-5',
-                        startLat: 22.2965,
-                        startLon: 73.2185,
-                        endLat: 22.2852,
-                        endLon: 73.2450,
-                        distance: 4.5,
-                        ward: {
-                            id: 'ward-waghodia-5',
-                            name: 'Ward 5 - Waghodia Road',
-                            city: 'Vadodara',
-                        },
-                    },
-                },
-            ]);
-            setError(null);
+            console.error('Failed to load assignments:', err);
+            setAssignments([]);
+            setError('Unable to load assignments. Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -321,12 +239,6 @@ export default function DashboardScreen() {
                 ))}
             </View>
 
-            {error && (
-                <View style={styles.errorContainer}>
-                    <Text style={styles.errorText}>{error}</Text>
-                </View>
-            )}
-
             <FlatList
                 data={filteredAssignments}
                 keyExtractor={item => item.id}
@@ -338,13 +250,26 @@ export default function DashboardScreen() {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
                 }
                 ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        <View style={styles.emptyIconBg}>
-                            <Text style={styles.emptyIcon}>📭</Text>
+                    error ? (
+                        <View style={styles.emptyContainer}>
+                            <View style={styles.emptyIconBg}>
+                                <Text style={styles.emptyIcon}>⚠️</Text>
+                            </View>
+                            <Text style={styles.emptyText}>Unable to load assignments</Text>
+                            <Text style={styles.emptySubtext}>{error}</Text>
+                            <TouchableOpacity style={styles.retryButton} onPress={() => loadAssignments()}>
+                                <Text style={styles.retryButtonText}>Retry</Text>
+                            </TouchableOpacity>
                         </View>
-                        <Text style={styles.emptyText}>No assignments found</Text>
-                        <Text style={styles.emptySubtext}>You're all caught up for now!</Text>
-                    </View>
+                    ) : (
+                        <View style={styles.emptyContainer}>
+                            <View style={styles.emptyIconBg}>
+                                <Text style={styles.emptyIcon}>📭</Text>
+                            </View>
+                            <Text style={styles.emptyText}>No assignments found</Text>
+                            <Text style={styles.emptySubtext}>You have no route assignments. Contact your supervisor.</Text>
+                        </View>
+                    )
                 }
             />
         </View>
@@ -594,6 +519,18 @@ const styles = StyleSheet.create({
     errorText: {
         ...typography.caption,
         color: colors.danger,
+        textAlign: 'center',
+    },
+    retryButton: {
+        marginTop: spacing.md,
+        backgroundColor: colors.primary,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.md,
+    },
+    retryButtonText: {
+        ...typography.caption,
+        color: '#fff',
         textAlign: 'center',
     },
 });

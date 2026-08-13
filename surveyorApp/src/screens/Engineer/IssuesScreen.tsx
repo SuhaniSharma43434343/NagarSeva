@@ -21,7 +21,7 @@ import { Colors, Typography, BorderRadius, Shadows, Spacing, getStatusConfig, ge
 
 type NavigationProp = NativeStackNavigationProp<EngineerStackParamList, 'Issues'>;
 
-type FilterTab = 'ALL' | 'ASSIGNED' | 'IN_PROGRESS' | 'FIXED';
+type FilterTab = 'ALL' | 'ASSIGNED' | 'IN_PROGRESS' | 'FIXED' | 'RESOLVED';
 
 export function IssuesScreen() {
     const insets = useSafeAreaInsets();
@@ -231,7 +231,7 @@ export function IssuesScreen() {
 
                     {/* Filter Tabs */}
                     <View style={styles.filterContainer}>
-                        {(['ALL', 'ASSIGNED', 'IN_PROGRESS', 'FIXED'] as FilterTab[]).map((filter) => (
+                        {(['ALL', 'ASSIGNED', 'IN_PROGRESS', 'FIXED', 'RESOLVED'] as FilterTab[]).map((filter) => (
                             <TouchableOpacity
                                 key={filter}
                                 style={[
@@ -244,7 +244,7 @@ export function IssuesScreen() {
                                     styles.filterTabText,
                                     activeFilter === filter && styles.filterTabTextActive
                                 ]}>
-                                    {filter === 'ALL' ? 'All' : filter === 'IN_PROGRESS' ? 'Active' : filter.charAt(0) + filter.slice(1).toLowerCase()}
+                                    {filter === 'ALL' ? 'All' : filter === 'IN_PROGRESS' ? 'Active' : filter === 'RESOLVED' ? 'Done' : filter.charAt(0) + filter.slice(1).toLowerCase()}
                                 </Text>
                             </TouchableOpacity>
                         ))}

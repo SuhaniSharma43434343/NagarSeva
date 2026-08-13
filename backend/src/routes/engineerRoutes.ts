@@ -14,6 +14,18 @@ cloudinary.config({
   api_secret: process.env.cloudinary_api_secret || "",
 });
 
+function hasValidCloudinaryConfig(): boolean {
+  const cloudName = process.env.cloudinary_cloud_name;
+  const apiKey = process.env.cloudinary_api_key;
+  return Boolean(
+    cloudName &&
+    !cloudName.includes("your_") &&
+    cloudName.trim().length > 0 &&
+    apiKey &&
+    !apiKey.includes("your_")
+  );
+}
+
 import multer from "multer";
 import path from "path";
 import { v4 as uuid } from "uuid";
@@ -46,9 +58,9 @@ const engineerRouter = Router();
 engineerRouter.post("/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    return res.json({
+    return res.status(400).json({
       success: false,
-      message: "username or password not found",
+      message: "Email and password are required.",
     });
   }
 
@@ -63,18 +75,27 @@ engineerRouter.post("/login", async (req: Request, res: Response) => {
     if (!user)
       return res
         .status(401)
-        .json({ success: false, message: "invalid credentials" });
+        .json({ success: false, message: "Invalid email or password." });
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid)
       return res
         .status(401)
-        .json({ success: false, message: "invalid credentials" });
+        .json({ success: false, message: "Invalid email or password." });
 
-    const secret = process.env.JWT_SECRET || "your_jwt_secret_here";
+    if (user.role !== "ENGINEER") {
+      return res
+        .status(403)
+        .json({ success: false, message: "Access denied. You do not have permission to use this login." });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res.status(500).json({ success: false, message: "Server configuration error." });
+    }
     const token = jwt.sign(
       { userId: user.id, role: user.role },
-      secret,
+      jwtSecret,
       { expiresIn: "7d" },
     );
 
@@ -82,7 +103,7 @@ engineerRouter.post("/login", async (req: Request, res: Response) => {
     res.status(200).json({ success: true, token, user: safeUser });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ success: false, message: "internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
@@ -221,20 +242,28 @@ engineerRouter.put(
           .json({ success: false, message: "Issue must be IN_PROGRESS or ASSIGNED to be marked as fixed" });
       }
 
-      const uploadImage = await cloudinary.uploader.upload(
-        `uploads/issues/${file.filename}`,
-        {
-          folder: "issue-resolutions",
-          quality: "auto",
-          fetch_format: "auto",
+      let afterUrl = `http://localhost:3000/uploads/issues/${file.filename}`;
+      if (hasValidCloudinaryConfig()) {
+        try {
+          const uploadImage = await cloudinary.uploader.upload(
+            `uploads/issues/${file.filename}`,
+            {
+              folder: "issue-resolutions",
+              quality: "auto",
+              fetch_format: "auto",
+            }
+          );
+          afterUrl = uploadImage.url;
+        } catch (cErr) {
+          console.warn("Cloudinary upload failed in engineer routes, using local path:", cErr);
         }
-      );
+      }
 
       const updatedIssue = await prisma.issue.update({
         where: { id: issueId },
         data: {
           status: "FIXED",
-          afterUrl: uploadImage.url,
+          afterUrl: afterUrl,
         },
       });
 

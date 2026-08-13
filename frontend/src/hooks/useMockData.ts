@@ -18,6 +18,7 @@ import {
   dashboardStatsAtom,
 } from "@/atoms/dataAtoms";
 import { employeeApi, issueApi, routeApi, wardApi } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiUtils";
 import type { Employee, Issue, Route, IssueStatus } from "@/types";
 
 // Dashboard Stats Hook
@@ -69,14 +70,15 @@ export function useEmployees() {
     }) => {
       try {
         const response = await employeeApi.create(employee);
-        if (response.success) {
+        if (response && response.success) {
           setEmployees((prev) => [...prev, response.data]);
-          return response.data;
+          return { success: true, data: response.data, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to add employee" };
       } catch (err: any) {
         console.error("Failed to add employee:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to add employee") };
       }
-      return null;
     },
     [setEmployees]
   );
@@ -85,16 +87,17 @@ export function useEmployees() {
     async (employeeId: string, data: { name?: string; email?: string; role?: string; wardId?: string }) => {
       try {
         const response = await employeeApi.update(employeeId, data);
-        if (response.success) {
+        if (response && response.success) {
           setEmployees((prev) =>
             prev.map((emp) => (emp.id === employeeId ? { ...emp, ...response.data } : emp))
           );
-          return true;
+          return { success: true, data: response.data, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to update employee" };
       } catch (err: any) {
         console.error("Failed to update employee:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to update employee") };
       }
-      return false;
     },
     [setEmployees]
   );
@@ -103,14 +106,15 @@ export function useEmployees() {
     async (employeeId: string) => {
       try {
         const response = await employeeApi.delete(employeeId);
-        if (response.success) {
+        if (response && response.success) {
           setEmployees((prev) => prev.filter((emp) => emp.id !== employeeId));
-          return true;
+          return { success: true, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to delete employee" };
       } catch (err: any) {
         console.error("Failed to delete employee:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to delete employee") };
       }
-      return false;
     },
     [setEmployees]
   );
@@ -210,12 +214,14 @@ export function useRoutes() {
                 : r
             )
           );
-          return true;
+          return { success: true, message: response.message };
         }
+        return { success: false, message: response.message || "Failed to assign route." };
       } catch (err: any) {
         console.error("Failed to assign surveyor:", err);
+        const errorMsg = err.response?.data?.message || err.message || "Failed to assign route.";
+        return { success: false, message: errorMsg };
       }
-      return false;
     },
     [setRoutes]
   );
@@ -224,14 +230,15 @@ export function useRoutes() {
     async (payload: { name: string; wardId: string; distance?: number; startLat?: number; startLon?: number; endLat?: number; endLon?: number }) => {
       try {
         const response = await routeApi.createRoute(payload);
-        if (response.success && response.data) {
+        if (response && response.success && response.data) {
           setRoutes((prev) => [response.data as Route, ...prev]);
-          return response.data;
+          return { success: true, data: response.data, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to create route" };
       } catch (err: any) {
         console.error("Failed to create route:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to create route") };
       }
-      return null;
     },
     [setRoutes]
   );
@@ -240,16 +247,17 @@ export function useRoutes() {
     async (routeId: string, payload: { name?: string; wardId?: string; distance?: number; startLat?: number; startLon?: number; endLat?: number; endLon?: number }) => {
       try {
         const response = await routeApi.update(routeId, payload);
-        if (response.success && response.data) {
+        if (response && response.success && response.data) {
           setRoutes((prev) =>
             prev.map((r) => (r.id === routeId ? { ...r, ...response.data } as Route : r))
           );
-          return true;
+          return { success: true, data: response.data, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to update route" };
       } catch (err: any) {
         console.error("Failed to update route:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to update route") };
       }
-      return false;
     },
     [setRoutes]
   );
@@ -258,14 +266,15 @@ export function useRoutes() {
     async (routeId: string) => {
       try {
         const response = await routeApi.delete(routeId);
-        if (response.success) {
+        if (response && response.success) {
           setRoutes((prev) => prev.filter((r) => r.id !== routeId));
-          return true;
+          return { success: true, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to delete route" };
       } catch (err: any) {
         console.error("Failed to delete route:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to delete route") };
       }
-      return false;
     },
     [setRoutes]
   );
@@ -358,8 +367,25 @@ export function useIssues() {
 
   useEffect(() => {
     fetchIssues();
-    const interval = setInterval(fetchIssues, 5000);
-    return () => clearInterval(interval);
+
+    // Poll every 5s only when the browser tab is visible to avoid unnecessary background requests
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchIssues();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchIssues();
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchIssues]);
 
   const assignEngineer = useCallback(
@@ -380,12 +406,14 @@ export function useIssues() {
                 : i
             )
           );
-          return true;
+          return { success: true, message: response.message };
         }
+        return { success: false, message: response.message || "Failed to assign engineer." };
       } catch (err: any) {
         console.error("Failed to assign engineer:", err);
+        const errorMsg = err.response?.data?.message || err.message || "Failed to assign engineer.";
+        return { success: false, message: errorMsg };
       }
-      return false;
     },
     [setIssues]
   );
@@ -398,7 +426,7 @@ export function useIssues() {
           approved ? "APPROVED" : "REJECTED",
           feedback
         );
-        if (response.success) {
+        if (response && response.success) {
           // Update local state
           setIssues((prev) =>
             prev.map((i) =>
@@ -411,12 +439,13 @@ export function useIssues() {
                 : i
             )
           );
-          return true;
+          return { success: true, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to verify resolution" };
       } catch (err: any) {
         console.error("Failed to verify resolution:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to verify resolution") };
       }
-      return false;
     },
     [setIssues]
   );
@@ -436,12 +465,13 @@ export function useIssues() {
                 : i
             )
           );
-          return response.data;
+          return { success: true, data: response.data, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to analyze issue" };
       } catch (err: any) {
         console.error("Failed to analyze issue:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to analyze issue") };
       }
-      return null;
     },
     [setIssues]
   );
@@ -461,12 +491,13 @@ export function useIssues() {
                 : i
             )
           );
-          return response.data;
+          return { success: true, data: response.data, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to audit resolution" };
       } catch (err: any) {
         console.error("Failed to audit resolution:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to audit resolution") };
       }
-      return null;
     },
     [setIssues]
   );
@@ -476,13 +507,15 @@ export function useIssues() {
       try {
         const response = await issueApi.delete(issueId);
         if (response && response.success) {
+          previousIssueIdsRef.current.delete(issueId);
           setIssues((prev) => prev.filter((i) => i.id !== issueId));
-          return true;
+          return { success: true, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to delete issue" };
       } catch (err: any) {
         console.error("Failed to delete issue:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to delete issue") };
       }
-      return false;
     },
     [setIssues]
   );
@@ -492,13 +525,15 @@ export function useIssues() {
       try {
         const response = await issueApi.bulkDelete(issueIds);
         if (response && response.success) {
+          issueIds.forEach((id) => previousIssueIdsRef.current.delete(id));
           setIssues((prev) => prev.filter((i) => !issueIds.includes(i.id)));
-          return true;
+          return { success: true, message: response.message };
         }
+        return { success: false, message: response?.message || "Failed to bulk delete issues" };
       } catch (err: any) {
         console.error("Failed to bulk delete issues:", err);
+        return { success: false, message: getApiErrorMessage(err, "Failed to bulk delete issues") };
       }
-      return false;
     },
     [setIssues]
   );

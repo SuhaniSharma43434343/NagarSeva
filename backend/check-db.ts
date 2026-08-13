@@ -2,11 +2,15 @@ import { prisma } from './src/lib/prisma.js';
 import bcrypt from 'bcrypt';
 
 async function main() {
-  const users = await prisma.user.findMany();
-  console.log('--- ALL USERS IN DB ---');
-  for (const u of users) {
-    const match = await bcrypt.compare('admin123', u.password);
-    console.log(`User: ${u.email} | Role: ${u.role} | Password match with "admin123": ${match}`);
+  const alkapuriWard = await prisma.ward.findFirst({ where: { number: 1 }, include: { routes: true } });
+  if (alkapuriWard && alkapuriWard.routes.length > 0) {
+    const updated = await prisma.issue.updateMany({
+      data: {
+        wardId: alkapuriWard.id,
+        routeId: alkapuriWard.routes[0].id,
+      },
+    });
+    console.log(`Re-assigned ${updated.count} issues to Ward 1 - Alkapuri (${alkapuriWard.routes[0].name})`);
   }
 }
 

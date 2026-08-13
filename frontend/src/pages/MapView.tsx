@@ -197,8 +197,27 @@ const MapView = () => {
                     <p className="font-medium text-foreground">
                       {selectedIssue.wardName} - {selectedIssue.routeName}
                     </p>
-                    <div className="text-muted-foreground font-mono">
-                      {selectedIssue.latitude.toFixed(4)}, {selectedIssue.longitude.toFixed(4)}
+                    <div className="text-muted-foreground font-mono text-[11px] space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-foreground">Lat:</span>
+                        <span>{selectedIssue.latitude.toFixed(6)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-foreground">Lng:</span>
+                        <span>{selectedIssue.longitude.toFixed(6)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <span className="font-semibold text-foreground">GPS Source:</span>
+                        {(selectedIssue as any).gpsAccuracy != null ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                            📡 Real GPS ±{Math.round((selectedIssue as any).gpsAccuracy)}m
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                            ⚠️ No accuracy data
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>

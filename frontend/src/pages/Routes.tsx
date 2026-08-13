@@ -115,20 +115,20 @@ const Routes = () => {
     }
     setIsSubmitting(true);
     try {
-      const success = await updateRoute(editingRoute.id, {
+      const res = await updateRoute(editingRoute.id, {
         name: editRouteName.trim(),
         wardId: editWardId,
         distance: parseFloat(editDistance) || 2.5,
       });
-      if (success) {
+      if (res && res.success) {
         toast.success("Route updated successfully");
         setEditDialogOpen(false);
         setEditingRoute(null);
       } else {
-        toast.error("Failed to update route");
+        toast.error(res?.message || "Failed to update route");
       }
-    } catch (err) {
-      toast.error("Error updating route");
+    } catch (err: any) {
+      toast.error(err.message || "Error updating route");
     } finally {
       setIsSubmitting(false);
     }
@@ -140,11 +140,15 @@ const Routes = () => {
       return;
     }
     if (window.confirm(`Are you sure you want to delete route "${route.name}"?`)) {
-      const success = await deleteRoute(route.id);
-      if (success) {
-        toast.success("Route deleted successfully");
-      } else {
-        toast.error("Failed to delete route. Check if route has active assignments or issues.");
+      try {
+        const res = await deleteRoute(route.id);
+        if (res && res.success) {
+          toast.success("Route deleted successfully");
+        } else {
+          toast.error(res?.message || "Failed to delete route. Check if route has active assignments or issues.");
+        }
+      } catch (err: any) {
+        toast.error(err.message || "Failed to delete route.");
       }
     }
   };
@@ -231,19 +235,30 @@ const Routes = () => {
     {} as Record<string, typeof filteredRoutes>,
   );
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!selectedRoute || !selectedSurveyor) {
       toast.error(t('routesPage.selectSurveyorError'));
       return;
     }
     const surveyor = surveyors?.find((s) => s.id === selectedSurveyor);
     if (surveyor) {
-      assignSurveyor(selectedRoute, surveyor.id, surveyor.name);
-      toast.success(t('routesPage.surveyorAssignedSuccess'));
+      setIsSubmitting(true);
+      try {
+        const res = await assignSurveyor(selectedRoute, surveyor.id, surveyor.name);
+        if (res && res.success) {
+          toast.success(t('routesPage.surveyorAssignedSuccess'));
+          setAssignDialogOpen(false);
+          setSelectedRoute(null);
+          setSelectedSurveyor("");
+        } else {
+          toast.error(res?.message || "Failed to assign route.");
+        }
+      } catch (err: any) {
+        toast.error(err.message || "Failed to assign route.");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
-    setAssignDialogOpen(false);
-    setSelectedRoute(null);
-    setSelectedSurveyor("");
   };
 
   const handleCreateRoute = async () => {
@@ -268,16 +283,16 @@ const Routes = () => {
         endLon: parseFloat(newEndLon) || 73.1850,
       });
 
-      if (res) {
+      if (res && res.success) {
         toast.success("Custom Route Created Successfully!");
         setCreateDialogOpen(false);
         setNewRouteName("");
         setNewWardId("");
       } else {
-        toast.error("Failed to create route");
+        toast.error(res?.message || "Failed to create route");
       }
     } catch (err: any) {
-      toast.error("Error creating route");
+      toast.error(err.message || "Error creating route");
     } finally {
       setIsSubmitting(false);
     }

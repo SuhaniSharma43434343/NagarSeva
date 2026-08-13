@@ -143,6 +143,16 @@ export const issueApi = {
     return response.data;
   },
 
+  getExportUrl: (params?: { startDate?: string; endDate?: string; wardId?: string; status?: string }) => {
+    const base = '/api/admin/exportIssues';
+    const query = new URLSearchParams();
+    if (params?.startDate) query.set('startDate', params.startDate);
+    if (params?.endDate) query.set('endDate', params.endDate);
+    if (params?.wardId && params.wardId !== 'all') query.set('wardId', params.wardId);
+    if (params?.status && params.status !== 'all') query.set('status', params.status);
+    return `${query.toString() ? `${base}?${query.toString()}` : base}`;
+  },
+
   delete: async (issueId: string) => {
     const response = await api.delete<ApiResponse<any>>(`/api/admin/issue/${issueId}`);
     return response.data;

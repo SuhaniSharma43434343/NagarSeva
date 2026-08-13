@@ -27,10 +27,10 @@ interface Message {
   timestamp: Date;
 }
 
-// Use proxy in development to avoid CORS issues
-const API_BASE_URL = import.meta.env.DEV
-  ? "/api/chat"
-  : "https://sql-agent-vmc-1.onrender.com";
+// Always route through the Vite dev proxy (/api/chat) or the backend
+// which proxies to the external render.com service. This avoids direct
+// browser→external CORS issues in both dev and production builds.
+const API_BASE_URL = "/api/chat";
 
 type ChatLanguage = "english" | "hindi" | "gujarati";
 

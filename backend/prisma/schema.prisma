@@ -116,16 +116,18 @@ model Issue {
   
   latitude Float
   longitude Float
+  gpsAccuracy Float?
+  capturedAt DateTime?
   confidence Float?
 
-  wardId String
-  ward Ward @relation(fields: [wardId], references: [id])
+  wardId String?
+  ward Ward? @relation(fields: [wardId], references: [id])
 
-  surveySessionId String
-  surveySession SurveySession @relation(fields: [surveySessionId], references: [id])
+  surveySessionId String?
+  surveySession SurveySession? @relation(fields: [surveySessionId], references: [id])
 
-  routeId String
-  route Route @relation(fields: [routeId], references: [id])
+  routeId String?
+  route Route? @relation(fields: [routeId], references: [id])
 
   imageUrl String
   afterUrl String?

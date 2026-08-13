@@ -15,6 +15,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { launchCamera, CameraOptions, ImagePickerResponse } from 'react-native-image-picker';
 import api from '../../services/api';
+import { getMobileErrorMessage } from '../../services/mobileApiUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { Issue, StatusUpdatePayload } from '../../types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,16 +46,19 @@ export function IssueDetailScreen() {
         setIsLoading(true);
         try {
             const response = await api.engineerAcceptAssignment(issue.id);
-            if (response.success && response.data) {
-                setIssue(response.data);
+            if (response && response.success) {
+                if (response.data) {
+                    setIssue(response.data);
+                } else {
+                    setIssue((prev: typeof issue) => ({ ...prev, status: 'IN_PROGRESS' as const }));
+                }
+                Alert.alert('Success', 'Issue marked as In Progress');
             } else {
-                setIssue((prev: typeof issue) => ({ ...prev, status: 'IN_PROGRESS' as const }));
+                Alert.alert('Error', response?.message || 'Failed to update issue status');
             }
-            Alert.alert('Success', 'Issue marked as In Progress');
         } catch (error: any) {
-            console.log('Accept warning (proceeding):', error);
-            setIssue((prev: typeof issue) => ({ ...prev, status: 'IN_PROGRESS' as const }));
-            Alert.alert('Success', 'Issue marked as In Progress');
+            const msg = getMobileErrorMessage(error, 'Failed to update issue status');
+            Alert.alert('Error', msg);
         } finally {
             setIsLoading(false);
         }

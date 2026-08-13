@@ -16,6 +16,7 @@ import { colors, typography, spacing, borderRadius, shadows } from '../../theme'
 import { Button, Card, Header, StatusBadge } from '../../components';
 import { SurveyorStackParamList } from '../../navigation/SurveyorNavigator';
 import api from '../../services/api';
+import { getMobileErrorMessage } from '../../services/mobileApiUtils';
 
 type NavigationProp = NativeStackNavigationProp<SurveyorStackParamList, 'AssignmentDetail'>;
 type RouteType = RouteProp<SurveyorStackParamList, 'AssignmentDetail'>;
@@ -56,13 +57,16 @@ export default function AssignmentDetailScreen() {
     async function handleAccept() {
         setLoading(true);
         try {
-            await api.acceptAssignment(assignment.id);
-            setCurrentStatus('IN_PROGRESS');
-            Alert.alert('Success', 'Assignment accepted! You can now start the survey.');
-        } catch (error) {
-            console.log('Accept warning (proceeding to survey):', error);
-            setCurrentStatus('IN_PROGRESS');
-            Alert.alert('Assignment Accepted', 'Assignment is ready. You can now start the survey.');
+            const response = await api.acceptAssignment(assignment.id);
+            if (response && response.success) {
+                setCurrentStatus('IN_PROGRESS');
+                Alert.alert('Success', 'Assignment accepted! You can now start the survey.');
+            } else {
+                Alert.alert('Error', response?.message || 'Failed to accept assignment');
+            }
+        } catch (error: any) {
+            const msg = getMobileErrorMessage(error, 'Failed to accept assignment');
+            Alert.alert('Error', msg);
         } finally {
             setLoading(false);
         }

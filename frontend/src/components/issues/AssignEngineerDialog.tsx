@@ -20,18 +20,22 @@ export const AssignEngineerDialog = ({
   onAssign,
 }: AssignEngineerDialogProps) => {
   const [selectedEngineer, setSelectedEngineer] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!selectedEngineer) {
       toast.error('Please select an engineer');
       return;
     }
     const engineer = engineers.find((e) => e.id === selectedEngineer);
     if (engineer) {
-      onAssign(engineer.id, engineer.name);
-      toast.success('Engineer assigned successfully');
-      onOpenChange(false);
-      setSelectedEngineer('');
+      setIsSubmitting(true);
+      try {
+        await onAssign(engineer.id, engineer.name);
+        setSelectedEngineer('');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -57,8 +61,8 @@ export const AssignEngineerDialog = ({
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleAssign} className="w-full">
-            Assign Engineer
+          <Button onClick={handleAssign} disabled={isSubmitting} className="w-full">
+            {isSubmitting ? 'Assigning...' : 'Assign Engineer'}
           </Button>
         </div>
       </DialogContent>

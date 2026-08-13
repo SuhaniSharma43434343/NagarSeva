@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Use 10.0.2.2 for Android emulator to reach localhost on host machine, or localhost for ADB reverse
-const BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api';
+// Use http://localhost:3000/api for ADB reverse port forwarding (works on both physical devices and emulators)
+const BASE_URL = 'http://localhost:3000/api';
 
 // Response types
 interface LoginResponse {
@@ -301,28 +301,33 @@ class ApiService {
             } as any);
         });
 
-        console.log('Making fetch request to:', `${BASE_URL}/surveyor/upload`);
+        const uploadUrls = Array.from(new Set([
+            `${BASE_URL}/surveyor/upload`,
+            'http://127.0.0.1:3000/api/surveyor/upload',
+            'http://10.226.8.113:3000/api/surveyor/upload',
+            'http://localhost:3000/api/surveyor/upload',
+            'http://10.0.2.2:3000/api/surveyor/upload',
+        ]));
 
-        try {
-            const response = await fetch(`${BASE_URL}/surveyor/upload`, {
-                method: 'POST',
-                headers: this.getHeaders(true),
-                body: formData,
-            });
+        for (const url of uploadUrls) {
+            try {
+                console.log('Making fetch request to:', url);
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: this.getHeaders(true),
+                    body: formData,
+                });
 
-            console.log('Response status:', response.status);
-            console.log('Response ok:', response.ok);
-
-            const result = await response.json();
-            console.log('Response body:', result);
-            return result;
-        } catch (error: any) {
-            console.error('=== Upload fetch error ===');
-            console.error('Error name:', error?.name);
-            console.error('Error message:', error?.message);
-            console.error('Full error:', error);
-            throw error;
+                const result = await response.json();
+                if (response.ok && result) {
+                    console.log('✅ Upload frames succeeded at:', url);
+                    return result;
+                }
+            } catch (error: any) {
+                console.warn(`Upload frames attempt to ${url} failed:`, error?.message || error);
+            }
         }
+        throw new Error('Failed to connect to backend server for frame upload.');
     }
 
     // ==================== SINGLE DETECTION REPORT ====================
@@ -336,26 +341,32 @@ class ApiService {
         latitude: number,
         longitude: number,
         confidence: number,
-        photoData?: string
-    ): Promise<{ success: boolean; data?: any; message?: string }> {
-        console.log('=== reportDetection called ===');
-        console.log('photoUri:', photoUri);
-        console.log('GPS:', latitude, longitude);
+        photoData?: string,
+        accuracy?: number,
+        capturedAt?: string,
+        detectionId?: string
+    ): Promise<{ success: boolean; data?: any; message?: string; httpStatus?: number }> {
+        // Use provided detectionId if available; fall back to last 12 chars of URI for backward-compat
+        const resolvedDetectionId = detectionId || photoUri.slice(-12);
+        console.log(`[UPLOAD FORM DATA] Detection ID=${resolvedDetectionId} lat=${latitude} lng=${longitude} accuracy=${accuracy ?? 'N/A'} capturedAt=${capturedAt ?? 'N/A'}`);
+        console.log(`[FORMDATA detectionId=${resolvedDetectionId}] routeId=${routeId} wardId=${wardId} sessionId=${surverySessionId} assignmentId=${routeAssignmentId} confidence=${confidence} accuracy=${accuracy ?? 'N/A'} capturedAt=${capturedAt ?? 'N/A'}`);
+        console.log(`[FORMDATA detectionId=${resolvedDetectionId}] photoUri=${photoUri.slice(-40)} hasPhotoData=${!!photoData}`);
 
         if (!this.token) {
             this.token = await AsyncStorage.getItem('authToken');
         }
 
-        const urlsToTry = [
+        const urlsToTry = Array.from(new Set([
             `${BASE_URL}/surveyor/reportDetection`,
-            'http://10.226.23.8:3000/api/surveyor/reportDetection',
-            'http://10.0.2.2:3000/api/surveyor/reportDetection',
-            'http://localhost:3000/api/surveyor/reportDetection',
             'http://127.0.0.1:3000/api/surveyor/reportDetection',
-        ];
+            'http://10.226.8.113:3000/api/surveyor/reportDetection',
+            'http://localhost:3000/api/surveyor/reportDetection',
+            'http://10.0.2.2:3000/api/surveyor/reportDetection',
+        ]));
 
         // 1. Try Multipart upload first across available URLs
         const formData = new FormData();
+        formData.append('detectionId', resolvedDetectionId);
         formData.append('routeId', routeId);
         formData.append('wardId', wardId);
         formData.append('surverySessionId', surverySessionId);
@@ -363,14 +374,24 @@ class ApiService {
         formData.append('latitude', latitude.toString());
         formData.append('longitude', longitude.toString());
         formData.append('confidence', confidence.toString());
-        formData.append('photoUri', photoUri);
-        if (photoData) {
-            formData.append('photoData', photoData);
+        if (accuracy !== undefined && accuracy !== null) {
+            formData.append('accuracy', accuracy.toString());
+        }
+        if (capturedAt) {
+            formData.append('capturedAt', capturedAt);
         }
 
-        if (photoUri && !photoUri.startsWith('http') && !photoUri.startsWith('data:')) {
+        const cleanUri = photoUri.startsWith('file://')
+            ? photoUri
+            : photoUri.startsWith('/')
+                ? `file://${photoUri}`
+                : photoUri;
+
+        formData.append('photoUri', cleanUri);
+
+        if (cleanUri && !cleanUri.startsWith('http') && !cleanUri.startsWith('data:')) {
             formData.append('photo', {
-                uri: photoUri,
+                uri: cleanUri,
                 name: `pothole_${Date.now()}.jpg`,
                 type: 'image/jpeg',
             } as any);
@@ -386,7 +407,15 @@ class ApiService {
                 const result = await response.json();
                 if (response.ok && result && result.success) {
                     console.log('✅ Multipart upload succeeded at:', url);
-                    return { success: true, ...result };
+                    return { success: true, ...result, httpStatus: response.status };
+                }
+                // Log non-success responses so developers can diagnose
+                console.warn(`[UPLOAD] Multipart non-success at ${url} — HTTP ${response.status}:`, JSON.stringify(result));
+                if (response.status === 401) {
+                    return { success: false, message: 'Session expired. Please log out and log in again.', httpStatus: response.status };
+                }
+                if (response.status === 400 && result?.message) {
+                    return { success: false, message: result.message, httpStatus: response.status };
                 }
             } catch (err) {
                 console.warn(`Multipart upload to ${url} failed:`, err);
@@ -418,7 +447,14 @@ class ApiService {
                 const jsonResult = await jsonRes.json();
                 if (jsonRes.ok && jsonResult && jsonResult.success) {
                     console.log('✅ JSON base64 upload succeeded at:', url);
-                    return { success: true, ...jsonResult };
+                    return { success: true, ...jsonResult, httpStatus: jsonRes.status };
+                }
+                console.warn(`[UPLOAD] JSON fallback non-success at ${url} — HTTP ${jsonRes.status}:`, JSON.stringify(jsonResult));
+                if (jsonRes.status === 401) {
+                    return { success: false, message: 'Session expired. Please log out and log in again.', httpStatus: jsonRes.status };
+                }
+                if (jsonRes.status === 400 && jsonResult?.message) {
+                    return { success: false, message: jsonResult.message, httpStatus: jsonRes.status };
                 }
             } catch (e) {
                 console.warn(`JSON upload to ${url} failed:`, e);
@@ -427,7 +463,8 @@ class ApiService {
 
         return {
             success: false,
-            message: 'Failed to connect to backend server. Please verify backend is running on port 3000.'
+            message: 'Failed to connect to backend server. Please verify backend is running on port 3000.',
+            httpStatus: undefined
         };
     }
 }
