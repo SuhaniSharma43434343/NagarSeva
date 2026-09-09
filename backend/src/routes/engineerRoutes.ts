@@ -260,7 +260,16 @@ engineerRouter.put(
         }
       }
 
-      if (!afterUrl) afterUrl = localUploadUrl(`uploads/issues/${file.filename}`);
+      if (!afterUrl) {
+        try {
+          afterUrl = localUploadUrl(`uploads/issues/${file.filename}`);
+        } catch (storageErr) {
+          return res.status(500).json({
+            success: false,
+            message: "Permanent image storage unavailable. Please check Cloudinary configuration.",
+          });
+        }
+      }
 
       const updatedIssue = await prisma.issue.update({
         where: { id: issueId },

@@ -542,10 +542,24 @@ surveyorRouter.post(
             console.log("✅ Image uploaded to Cloudinary:", imageUrl);
           } catch (cloudErr) {
             console.warn("Cloudinary upload failed, using local server path:", cloudErr);
-            imageUrl = localUploadUrl(imagePath);
+            try {
+              imageUrl = localUploadUrl(imagePath);
+            } catch (storageErr) {
+              return res.status(500).json({
+                success: false,
+                message: "Image upload failed: Cloudinary is unreachable and local storage is disabled in production.",
+              });
+            }
           }
         } else {
-          imageUrl = localUploadUrl(imagePath);
+          try {
+            imageUrl = localUploadUrl(imagePath);
+          } catch (storageErr) {
+            return res.status(500).json({
+              success: false,
+              message: "Image upload failed: Cloudinary is not configured and local storage is disabled in production.",
+            });
+          }
         }
       } else if (req.body.photoData && typeof req.body.photoData === "string" && req.body.photoData.length > 50) {
         try {
@@ -562,10 +576,24 @@ surveyorRouter.post(
               });
               imageUrl = uploadResult.secure_url;
             } catch (cloudErr) {
-              imageUrl = localUploadUrl(filename);
+              try {
+                imageUrl = localUploadUrl(filename);
+              } catch (storageErr) {
+                return res.status(500).json({
+                  success: false,
+                  message: "Image upload failed: Cloudinary is unreachable and local storage is disabled in production.",
+                });
+              }
             }
           } else {
-            imageUrl = localUploadUrl(filename);
+            try {
+              imageUrl = localUploadUrl(filename);
+            } catch (storageErr) {
+              return res.status(500).json({
+                success: false,
+                message: "Image upload failed: Cloudinary is not configured and local storage is disabled in production.",
+              });
+            }
           }
           console.log("✅ Saved real-time photo to file and URL:", imageUrl);
         } catch (b64Err) {
