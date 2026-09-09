@@ -1,9 +1,10 @@
+import { BACKEND_URL } from "./backendUrl";
 import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
-    timeout: 30000,
+    baseURL: BACKEND_URL,
+    timeout: 150000,
     headers: {
         'Content-Type': 'application/json',
     },

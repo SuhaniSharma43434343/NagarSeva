@@ -1,3 +1,4 @@
+import { BACKEND_URL } from "@/lib/backendUrl";
 import { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useIssues } from '@/hooks/useMockData';
@@ -175,9 +176,9 @@ const MapView = () => {
                       selectedIssue.imageUrl?.startsWith("data:") || selectedIssue.imageUrl?.startsWith("http")
                         ? selectedIssue.imageUrl
                         : selectedIssue.imageUrl?.startsWith("/")
-                          ? `http://localhost:3000${selectedIssue.imageUrl}`
+                          ? `${BACKEND_URL}${selectedIssue.imageUrl}`
                           : selectedIssue.imageUrl
-                            ? `http://localhost:3000/${selectedIssue.imageUrl}`
+                            ? `${BACKEND_URL}/${selectedIssue.imageUrl}`
                             : "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80"
                     }
                     alt={selectedIssue.type}

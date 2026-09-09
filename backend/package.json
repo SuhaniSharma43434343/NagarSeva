@@ -4,10 +4,11 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.mjs",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -b",
-    "start": "node dist/server.js"
+    "build": "prisma generate && tsc -b",
+    "start": "node dist/server.js",
+    "db:migrate": "prisma migrate deploy"
   },
   "keywords": [],
   "author": "",
@@ -38,6 +39,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
@@ -47,6 +49,10 @@
     "@types/pg": "^8.16.0",
     "@types/piexifjs": "^1.0.0",
     "prisma": "^7.2.0",
-    "tsx": "^4.20.3"
+    "tsx": "^4.20.3",
+    "typescript": "~5.8.3"
+  },
+  "engines": {
+    "node": ">=22.12.0 <23"
   }
 }

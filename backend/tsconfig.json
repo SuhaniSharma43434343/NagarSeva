@@ -1,6 +1,7 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.cache/backend.tsbuildinfo",
     // File Layout
      "rootDir": "./src",
       "outDir": "./dist",
@@ -44,7 +45,7 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
   },
-  "include":["src/**/*.ts"],
+  "include":["src/server.ts", "src/types/**/*.d.ts"],
   "exclude":  [
     "node_modules",
     "dist",

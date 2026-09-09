@@ -1,3 +1,4 @@
+import { production, serviceHeaders, serviceTimeout, modelServiceUrl } from "../lib/deployment.js";
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import bcrypt from "bcrypt";
@@ -24,6 +25,7 @@ adminRouter.post("/login", async (req, res) => {
     // If user not found and it's the first ever login attempt with this email,
     // or if no admin exists at all, handle auto-creation.
     if (!user) {
+      if (production) return res.status(401).json({ success: false, message: "Invalid credentials" });
       const adminExists = await prisma.user.findFirst({ where: { role: "ADMIN" } });
 
       if (!adminExists) {
@@ -699,6 +701,7 @@ adminRouter.put(
   requireRole("ADMIN"),
   async (req, res) => {
     const { issueId } = req.params;
+    if (!issueId) return res.status(400).json({ success: false, message: "Missing issue ID" });
     const { resolution, feedback } = req.body;
     if (!issueId) return res.json({ message: "issueId not found" });
 
@@ -995,6 +998,7 @@ adminRouter.post(
   requireRole("ADMIN"),
   async (req, res) => {
     const { issueId } = req.params;
+    if (!issueId) return res.status(400).json({ success: false, message: "Missing issue ID" });
     if (!issueId) return res.status(400).json({ success: false, message: "issueId required" });
 
     try {
@@ -1009,7 +1013,7 @@ adminRouter.post(
 
       // Prepare image buffer / stream for Python AI microservice
       const form = new FormData();
-      const modelServiceUrl = process.env.MODEL_SERVICE_URL || "http://localhost:7860";
+
 
       if (issue.imageUrl.startsWith("http://localhost:3000/")) {
         const relativePath = issue.imageUrl.replace("http://localhost:3000/", "");
@@ -1029,10 +1033,10 @@ adminRouter.post(
         form.append("file", fakeBuf, { filename: "image.jpg", contentType: "image/jpeg" });
       }
 
-      // Call Python AI microservice /analyze endpoint (with 3s timeout for fast fallback)
+      // Allow time for CPU inference and an optional cold start.
       const aiRes = await axios.post(`${modelServiceUrl}/analyze`, form, {
-        headers: form.getHeaders(),
-        timeout: 3000,
+        headers: { ...form.getHeaders(), ...serviceHeaders },
+        timeout: serviceTimeout,
       });
 
       const analysisData = aiRes.data;
@@ -1061,30 +1065,7 @@ adminRouter.post(
       return res.json({ success: true, data: savedAnalysis });
     } catch (err: any) {
       console.error("AI analysis error:", err.message || err);
-      try {
-        const fallbackAnalysis = await prisma.issueAnalysis.upsert({
-          where: { issueId: issueId },
-          create: {
-            issueId: issueId,
-            severity: "HIGH",
-            depthEstimateCm: 5.5,
-            sizeClass: "MEDIUM",
-            priorityScore: 7,
-            recommendations: "Re-analyzed by AI Engine. Urgent patching recommended within 24 hours.",
-          },
-          update: {
-            severity: "HIGH",
-            depthEstimateCm: 5.5,
-            sizeClass: "MEDIUM",
-            priorityScore: 7,
-            recommendations: "Re-analyzed by AI Engine. Urgent patching recommended within 24 hours.",
-            analyzedAt: new Date(),
-          }
-        });
-        return res.json({ success: true, data: fallbackAnalysis });
-      } catch (fallbackErr) {
-        return res.status(500).json({ success: false, message: "Failed to perform AI analysis" });
-      }
+      return res.status(503).json({ success: false, message: "AI analysis unavailable. Please retry when the model service is ready." });
     }
   }
 );
@@ -1096,6 +1077,7 @@ adminRouter.post(
   requireRole("ADMIN"),
   async (req, res) => {
     const { issueId } = req.params;
+    if (!issueId) return res.status(400).json({ success: false, message: "Missing issue ID" });
     try {
       const issue = await prisma.issue.findUnique({
         where: { id: issueId },
@@ -1120,7 +1102,7 @@ adminRouter.post(
 
       // Prepare Before & After images for Python Microservice
       const form = new FormData();
-      const modelServiceUrl = process.env.MODEL_SERVICE_URL || "http://localhost:7860";
+
 
       // Attach Before image
       if (issue.imageUrl.startsWith("http://") || issue.imageUrl.startsWith("https://")) {
@@ -1141,22 +1123,14 @@ adminRouter.post(
         form.append("file_after", fakeA, { filename: "after.jpg", contentType: "image/jpeg" });
       }
 
-      let auditResult = {
-        repair_quality_score: 92,
-        quality_rating: "EXCELLENT",
-        verdict: "Pothole completely filled, sealed, and leveled with fresh asphalt. Surface texture matches pavement standard."
-      };
-
-      try {
-        const aiAuditRes = await axios.post(`${modelServiceUrl}/verify_resolution`, form, {
-          headers: form.getHeaders(),
-        });
-        if (aiAuditRes.data && aiAuditRes.data.success) {
-          auditResult = aiAuditRes.data;
-        }
-      } catch (aiErr) {
-        console.warn("AI audit microservice fallback:", aiErr);
+      const aiAuditRes = await axios.post(`${modelServiceUrl}/verify_resolution`, form, {
+        headers: { ...form.getHeaders(), ...serviceHeaders },
+        timeout: serviceTimeout,
+      });
+      if (!aiAuditRes.data?.success) {
+        return res.status(503).json({ success: false, message: "AI verification unavailable" });
       }
+      const auditResult = aiAuditRes.data;
 
       // Save to IssueResolution
       let updatedRes;
@@ -1273,6 +1247,7 @@ adminRouter.delete(
   requireRole("ADMIN"),
   async (req, res) => {
     const { issueId } = req.params;
+    if (!issueId) return res.status(400).json({ success: false, message: "Missing issue ID" });
 
     try {
       // Check if issue exists
@@ -1353,18 +1328,18 @@ adminRouter.get(
 
     try {
       const where: any = {};
-      
+
       if (startDate && endDate) {
         where.createdAt = {
           gte: new Date(startDate as string),
           lte: new Date(endDate as string),
         };
       }
-      
+
       if (wardId) {
         where.wardId = wardId;
       }
-      
+
       if (status) {
         where.status = status;
       }

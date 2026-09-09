@@ -1,3 +1,4 @@
+import { localUploadUrl } from "../lib/deployment.js";
 import { Router, type Request, type Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middlewares/authMiddleware.js";
@@ -242,7 +243,7 @@ engineerRouter.put(
           .json({ success: false, message: "Issue must be IN_PROGRESS or ASSIGNED to be marked as fixed" });
       }
 
-      let afterUrl = `http://localhost:3000/uploads/issues/${file.filename}`;
+      let afterUrl = "";
       if (hasValidCloudinaryConfig()) {
         try {
           const uploadImage = await cloudinary.uploader.upload(
@@ -253,11 +254,13 @@ engineerRouter.put(
               fetch_format: "auto",
             }
           );
-          afterUrl = uploadImage.url;
+          afterUrl = uploadImage.secure_url;
         } catch (cErr) {
           console.warn("Cloudinary upload failed in engineer routes, using local path:", cErr);
         }
       }
+
+      if (!afterUrl) afterUrl = localUploadUrl(`uploads/issues/${file.filename}`);
 
       const updatedIssue = await prisma.issue.update({
         where: { id: issueId },

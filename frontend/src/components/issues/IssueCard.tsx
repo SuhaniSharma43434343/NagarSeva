@@ -1,3 +1,4 @@
+import { BACKEND_URL } from "@/lib/backendUrl";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,9 +49,9 @@ export const IssueCard = ({ issue, onAssignClick, onVerifyClick, onAnalyzeClick,
               issue.imageUrl?.startsWith("data:") || issue.imageUrl?.startsWith("http")
                 ? issue.imageUrl
                 : issue.imageUrl?.startsWith("/")
-                  ? `http://localhost:3000${issue.imageUrl}`
+                  ? `${BACKEND_URL}${issue.imageUrl}`
                   : issue.imageUrl
-                    ? `http://localhost:3000/${issue.imageUrl}`
+                    ? `${BACKEND_URL}/${issue.imageUrl}`
                     : "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80"
             }
             alt={issue.type}

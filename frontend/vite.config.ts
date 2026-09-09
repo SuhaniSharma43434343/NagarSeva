@@ -8,14 +8,6 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 5173,
-    proxy: {
-      '/api/chat': {
-        target: 'https://sql-agent-vmc-1.onrender.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/chat/, ''),
-        secure: true,
-      },
-    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

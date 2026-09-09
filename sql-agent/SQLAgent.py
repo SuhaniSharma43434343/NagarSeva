@@ -5,6 +5,7 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langgraph.prebuilt import create_react_agent
 from langchain_groq import ChatGroq
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from prompt import GetPrompt
 
 # Load environment variables
@@ -20,6 +21,8 @@ def load_model():
     model = ChatGroq(
         model="llama-3.3-70b-versatile",
         api_key=key,
+        timeout=60,
+        max_retries=1,
     )
     return model
 
@@ -31,13 +34,20 @@ def load_database():
         print("ERROR: DATABASE_URL not set in environment.")
         return None
     try:
-        engine = create_engine(url)
-        db = SQLDatabase(engine)
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        parsed = make_url(url)
+        # Prisma-only query options are not accepted by psycopg2.
+        parsed = parsed.difference_update_query(["schema", "pgbouncer", "connection_limit", "pool_timeout"])
+        engine = create_engine(parsed, pool_pre_ping=True, pool_size=2, max_overflow=1,
+            connect_args={"connect_timeout": 10, "options": "-c default_transaction_read_only=on -c statement_timeout=15000"})
+        tables = [name.strip() for name in os.getenv("SQL_AGENT_TABLES", "Ward,Route,Issue,IssueAnalysis,IssueAssignment,IssueResolution,RouteAssignment,SurveySession").split(",") if name.strip()]
+        db = SQLDatabase(engine, include_tables=tables, sample_rows_in_table_info=0)
         print(f"Database connected. Dialect: {db.dialect}")
         print(f"Available tables: {db.get_usable_table_names()}")
         return db
     except Exception as e:
-        print(f"Failed to connect to database: {e}")
+        print("Failed to initialize database. Check the read-only URL and migrated schema.")
         return None
 
 
@@ -56,6 +66,7 @@ def ask_question(question: str, agent) -> str:
     for step in agent.stream(
         {"messages": [{"role": "user", "content": question}]},
         stream_mode="values",
+        config={"recursion_limit": 20},
     ):
         result = step["messages"][-1]
 

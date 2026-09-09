@@ -1,3 +1,4 @@
+import api from "@/lib/axiosClient";
 import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,11 +27,6 @@ interface Message {
   content: string;
   timestamp: Date;
 }
-
-// Always route through the Vite dev proxy (/api/chat) or the backend
-// which proxies to the external render.com service. This avoids direct
-// browser→external CORS issues in both dev and production builds.
-const API_BASE_URL = "/api/chat";
 
 type ChatLanguage = "english" | "hindi" | "gujarati";
 
@@ -75,21 +71,10 @@ export function ChatBot() {
     setIsTyping(true);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/ask?question=${encodeURIComponent(userMessage.content)}&language=${chatLanguage}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to get response");
-      }
-
-      const data = await response.json();
+      const { data } = await api.post("/api/chat/ask", {
+        question: userMessage.content,
+        language: chatLanguage,
+      }, { timeout: 150000 });
 
       // Extract the actual text content from the API response
       // API returns: { result: { content: "...", ... }, question: "..." }

@@ -1,0 +1,87 @@
+# Free trial configuration: idle sleep, shared 750-hour quota, and 512 MB memory limits apply.
+# The AI model may require a larger host; validate real inference before production use.
+# Uses an existing PostgreSQL database; no database is created or migrated automatically.
+services:
+  - type: web
+    name: nagarseva-backend
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: MODEL_SERVICE_URL
+        fromService:
+          type: web
+          name: nagarseva-ai
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: SQL_AGENT_URL
+        fromService:
+          type: web
+          name: nagarseva-sql-agent
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: INTERNAL_API_KEY
+        fromService:
+          type: web
+          name: nagarseva-ai
+          envVarKey: INTERNAL_API_KEY
+      - key: SERVICE_TIMEOUT_MS
+        value: "120000"
+      - key: cloudinary_cloud_name
+        sync: false
+      - key: cloudinary_api_key
+        sync: false
+      - key: cloudinary_api_secret
+        sync: false
+  - type: web
+    name: nagarseva-ai
+    runtime: docker
+    region: singapore
+    plan: free
+    healthCheckPath: /ready
+    dockerfilePath: ./microservices/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: PORT
+        value: "7860"
+      - key: APP_ENV
+        value: production
+      - key: INTERNAL_API_KEY
+        generateValue: true
+      - key: POTHOLE_MODEL_URL
+        sync: false
+      - key: POTHOLE_MODEL_SHA256
+        value: 565906940135e437d21493044145df6f8f637250f1a5a34e1fa054c6fc7c1f80
+  - type: web
+    name: nagarseva-sql-agent
+    runtime: docker
+    region: singapore
+    plan: free
+    healthCheckPath: /health
+    dockerfilePath: ./sql-agent/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: PORT
+        value: "5001"
+      - key: APP_ENV
+        value: production
+      - key: INTERNAL_API_KEY
+        fromService:
+          type: web
+          name: nagarseva-ai
+          envVarKey: INTERNAL_API_KEY
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SQL_AGENT_TABLES
+        value: Ward,Route,Issue,IssueAnalysis,IssueAssignment,IssueResolution,RouteAssignment,SurveySession

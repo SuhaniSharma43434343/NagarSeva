@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Use http://localhost:3000/api for ADB reverse port forwarding (works on both physical devices and emulators)
-const BASE_URL = 'http://localhost:3000/api';
+import { BASE_URL } from '../config/server';
 
 // Response types
 interface LoginResponse {
@@ -303,10 +302,6 @@ class ApiService {
 
         const uploadUrls = Array.from(new Set([
             `${BASE_URL}/surveyor/upload`,
-            'http://127.0.0.1:3000/api/surveyor/upload',
-            'http://10.226.8.113:3000/api/surveyor/upload',
-            'http://localhost:3000/api/surveyor/upload',
-            'http://10.0.2.2:3000/api/surveyor/upload',
         ]));
 
         for (const url of uploadUrls) {
@@ -358,10 +353,6 @@ class ApiService {
 
         const urlsToTry = Array.from(new Set([
             `${BASE_URL}/surveyor/reportDetection`,
-            'http://127.0.0.1:3000/api/surveyor/reportDetection',
-            'http://10.226.8.113:3000/api/surveyor/reportDetection',
-            'http://localhost:3000/api/surveyor/reportDetection',
-            'http://10.0.2.2:3000/api/surveyor/reportDetection',
         ]));
 
         // 1. Try Multipart upload first across available URLs

@@ -1,3 +1,4 @@
+import { localUploadUrl, serviceHeaders, serviceTimeout, modelServiceUrl } from "../lib/deployment.js";
 import { Router, type Request, type Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { findWardByCoordinates } from "../services/wardLocationService.js";
@@ -71,7 +72,7 @@ async function sendToPotholeModel(imagePath: string) {
   const form = new FormData();
   form.append("file", fs.createReadStream(imagePath));
 
-  const modelServiceUrl = process.env.MODEL_SERVICE_URL || "http://localhost:7860";
+
 
   const response = await axios.post(
     `${modelServiceUrl}/detect_with_visualization`,
@@ -79,7 +80,9 @@ async function sendToPotholeModel(imagePath: string) {
     {
       headers: {
         ...form.getHeaders(),
+        ...serviceHeaders,
       },
+      timeout: serviceTimeout,
       responseType: "arraybuffer",
     },
   );
@@ -90,8 +93,8 @@ async function sendToPotholeModel(imagePath: string) {
 async function processImage(
   file: Express.Multer.File,
   surverySession: any,
-  routeId: string,
-  wardId: string,
+  routeId: string | null,
+  wardId: string | null,
   engineerId: string | null,
   lat?: number,
   lon?: number
@@ -146,17 +149,17 @@ async function processImage(
         quality: "auto",
         fetch_format: "auto",
       });
-      finalImageUrl = uploadResult.url;
+      finalImageUrl = uploadResult.secure_url;
     } catch (cErr) {
-      finalImageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+      finalImageUrl = localUploadUrl(imagePath);
     }
   } else {
-    finalImageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+    finalImageUrl = localUploadUrl(imagePath);
   }
 
   if (!finalImageUrl) {
     // Image file exists on disk but URL was not set - use local server path as final fallback
-    finalImageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+    finalImageUrl = localUploadUrl(imagePath);
     console.warn(`[processImage] Using local server path as image URL: ${finalImageUrl}`);
   }
 
@@ -454,13 +457,13 @@ surveyorRouter.post(
         message: "images accepted ",
       });
 
-      const engineer = await prisma.user.findFirst({
+      const engineer = targetWardId ? await prisma.user.findFirst({
         where: {
           role: "ENGINEER",
           department: "POTHOLE",
           wardId: targetWardId,
         },
-      });
+      }) : null;
 
       (async () => {
         await Promise.all(
@@ -528,14 +531,14 @@ surveyorRouter.post(
               quality: "auto",
               fetch_format: "auto",
             });
-            imageUrl = uploadResult.url;
+            imageUrl = uploadResult.secure_url;
             console.log("✅ Image uploaded to Cloudinary:", imageUrl);
           } catch (cloudErr) {
             console.warn("Cloudinary upload failed, using local server path:", cloudErr);
-            imageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+            imageUrl = localUploadUrl(imagePath);
           }
         } else {
-          imageUrl = `http://localhost:3000/${imagePath.replace(/\\/g, "/")}`;
+          imageUrl = localUploadUrl(imagePath);
         }
       } else if (req.body.photoData && typeof req.body.photoData === "string" && req.body.photoData.length > 50) {
         try {
@@ -550,12 +553,12 @@ surveyorRouter.post(
                 quality: "auto",
                 fetch_format: "auto",
               });
-              imageUrl = uploadResult.url;
+              imageUrl = uploadResult.secure_url;
             } catch (cloudErr) {
-              imageUrl = `http://localhost:3000/${filename.replace(/\\/g, "/")}`;
+              imageUrl = localUploadUrl(filename);
             }
           } else {
-            imageUrl = `http://localhost:3000/${filename.replace(/\\/g, "/")}`;
+            imageUrl = localUploadUrl(filename);
           }
           console.log("✅ Saved real-time photo to file and URL:", imageUrl);
         } catch (b64Err) {
@@ -636,18 +639,19 @@ surveyorRouter.post(
       // Trigger Backend AI Analysis for Admin Dashboard automatically
       (async () => {
         try {
-          const modelServiceUrl = process.env.MODEL_SERVICE_URL || "http://localhost:7860";
+
           const form = new FormData();
 
           if (req.file && fs.existsSync(req.file.path)) {
             form.append("file", fs.createReadStream(req.file.path));
           } else {
-            const fakeBuf = Buffer.from("image buffer");
-            form.append("file", fakeBuf, { filename: "image.jpg", contentType: "image/jpeg" });
+            const image = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: serviceTimeout });
+            form.append("file", Buffer.from(image.data), { filename: "image.jpg", contentType: "image/jpeg" });
           }
 
           const aiRes = await axios.post(`${modelServiceUrl}/analyze`, form, {
-            headers: form.getHeaders(),
+            headers: { ...form.getHeaders(), ...serviceHeaders },
+        timeout: serviceTimeout,
           });
 
           const aiData = aiRes.data;
@@ -663,17 +667,7 @@ surveyorRouter.post(
           });
           console.log("🤖 Backend AI Analysis attached for Admin Dashboard on Issue:", issue.id);
         } catch (aiErr) {
-          console.warn("Backend AI Analysis fallback attached for Admin:", aiErr);
-          await prisma.issueAnalysis.create({
-            data: {
-              issueId: issue.id,
-              severity: "MEDIUM",
-              depthEstimateCm: 4.8,
-              sizeClass: "MEDIUM",
-              priorityScore: 6,
-              recommendations: "Substantial surface depression. Inspect during next maintenance cycle.",
-            }
-          }).catch(() => {});
+          console.warn("AI analysis unavailable; issue saved without an analysis.");
         }
       })();
 
