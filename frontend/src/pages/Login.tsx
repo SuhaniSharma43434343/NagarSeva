@@ -90,6 +90,7 @@ const Login = () => {
               {isLoading ? t('login.loggingIn') : t('login.loginButton')}
             </Button>
           </form>
+          {(!import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL.includes("localhost")) && (
           <div className="mt-6 p-4 bg-muted/30 rounded-lg">
             <p className="text-sm text-muted-foreground text-center">
               <strong>Demo credentials:</strong><br />
@@ -97,6 +98,7 @@ const Login = () => {
               Password: admin123
             </p>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

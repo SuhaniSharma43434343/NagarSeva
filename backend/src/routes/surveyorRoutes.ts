@@ -151,15 +151,22 @@ async function processImage(
       });
       finalImageUrl = uploadResult.secure_url;
     } catch (cErr) {
-      finalImageUrl = localUploadUrl(imagePath);
+      console.error("[processImage] Cloudinary upload failed:", cErr);
+      try { finalImageUrl = localUploadUrl(imagePath); } catch {
+        throw new Error("Image upload failed: Cloudinary is unreachable and local storage is disabled in production.");
+      }
     }
   } else {
-    finalImageUrl = localUploadUrl(imagePath);
+    try { finalImageUrl = localUploadUrl(imagePath); } catch {
+      throw new Error("Image upload failed: Cloudinary is not configured and local storage is disabled in production.");
+    }
   }
 
   if (!finalImageUrl) {
     // Image file exists on disk but URL was not set - use local server path as final fallback
-    finalImageUrl = localUploadUrl(imagePath);
+    try { finalImageUrl = localUploadUrl(imagePath); } catch {
+      throw new Error("Image upload failed: no storage backend available in production.");
+    }
     console.warn(`[processImage] Using local server path as image URL: ${finalImageUrl}`);
   }
 

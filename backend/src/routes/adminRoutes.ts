@@ -999,7 +999,6 @@ adminRouter.post(
   async (req, res) => {
     const { issueId } = req.params;
     if (!issueId) return res.status(400).json({ success: false, message: "Missing issue ID" });
-    if (!issueId) return res.status(400).json({ success: false, message: "issueId required" });
 
     try {
       const issue = await prisma.issue.findUnique({
@@ -1015,22 +1014,13 @@ adminRouter.post(
       const form = new FormData();
 
 
-      if (issue.imageUrl.startsWith("http://localhost:3000/")) {
-        const relativePath = issue.imageUrl.replace("http://localhost:3000/", "");
-        if (fs.existsSync(relativePath)) {
-          form.append("file", fs.createReadStream(relativePath));
-        } else {
-          const fakeBuf = Buffer.from("placeholder image");
-          form.append("file", fakeBuf, { filename: "image.jpg", contentType: "image/jpeg" });
-        }
-      } else if (issue.imageUrl.startsWith("http://") || issue.imageUrl.startsWith("https://")) {
+      if (issue.imageUrl.startsWith("http://") || issue.imageUrl.startsWith("https://")) {
         const response = await axios.get(issue.imageUrl, { responseType: "arraybuffer" });
         form.append("file", Buffer.from(response.data), { filename: "image.jpg", contentType: "image/jpeg" });
-      } else if (fs.existsSync(issue.imageUrl)) {
+      } else if (!production && fs.existsSync(issue.imageUrl)) {
         form.append("file", fs.createReadStream(issue.imageUrl));
       } else {
-        const fakeBuf = Buffer.from("placeholder image");
-        form.append("file", fakeBuf, { filename: "image.jpg", contentType: "image/jpeg" });
+        return res.status(400).json({ success: false, message: "Issue image is not available. Re-upload the image before requesting AI analysis." });
       }
 
       // Allow time for CPU inference and an optional cold start.
