@@ -35,10 +35,11 @@ do not blindly run migrations if those columns already exist. Never run migrate 
 No migration or demo seed runs automatically on deployment.
 
 For an empty DB only: from backend, run npm ci then npm run db:migrate.
-For a new installation only, scripts/bootstrap-admin.mjs creates one administrator using explicit
+For a new installation only, backend/scripts/bootstrap-admin.mjs creates one administrator using explicit
 ADMIN_EMAIL, ADMIN_PASSWORD (16+ characters), ADMIN_NAME, ADMIN_WARD_NAME, ADMIN_WARD_NUMBER.
 It does not reset existing accounts or seed demo data. Remove bootstrap variables after use.
 Production login cannot create an administrator for the first anonymous visitor.
+For a complete walkthrough and checklist, see [PRODUCTION_DEPLOYMENT_GUIDE.md](./PRODUCTION_DEPLOYMENT_GUIDE.md).
 
 ## Vercel and mobile
 
