@@ -51,6 +51,22 @@ class SQLTests(unittest.TestCase):
             self.assertEqual(database.call_args.kwargs['sample_rows_in_table_info'], 0)
 
 class ModelTests(unittest.TestCase):
+    def test_explicit_onnx_artifact_requires_matching_checksum(self):
+        import hashlib
+        module = load('prepare_onnx', 'microservices/prepare_models.py')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'pothole.onnx'
+            payload = b'test-artifact' * 200
+            path.write_bytes(payload)
+            with patch.dict(os.environ, {'MODEL_PATH': str(path)}, clear=True):
+                with self.assertRaisesRegex(RuntimeError, 'require POTHOLE_MODEL_SHA256'):
+                    module.prepare('pothole')
+                os.environ['POTHOLE_MODEL_SHA256'] = hashlib.sha256(payload).hexdigest()
+                self.assertTrue(module.prepare('pothole'))
+                path.write_bytes(b'changed-artifact' * 200)
+                with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+                    module.prepare('pothole')
+
     def test_missing_weights_and_checksum(self):
         module = load('prepare_models', 'microservices/prepare_models.py')
         with tempfile.TemporaryDirectory() as directory, patch.object(module, 'ROOT', Path(directory)), patch.dict(os.environ, {}, clear=True):
@@ -77,6 +93,11 @@ class ModelTests(unittest.TestCase):
             module.model = MagicMock()
             fake_cv2.imdecode.return_value = None
             self.assertEqual(client.post('/detect', headers=headers, files={'file': ('image.jpg', b'bad', 'image/jpeg')}).status_code, 400)
+            import numpy as np
+            fake_cv2.Laplacian.return_value.var.return_value = np.float64(0)
+            sharpness, blurry = module.check_image_sharpness(np.zeros((2, 2)))
+            self.assertIs(type(blurry), bool)
+            self.assertEqual(sharpness, 0.0)
 
 if __name__ == '__main__':
     unittest.main()

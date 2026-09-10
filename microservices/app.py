@@ -48,7 +48,10 @@ def load_model():
     global model
     if os.path.exists(MODEL_PATH):
         try:
-            model = YOLO(MODEL_PATH)
+            candidate = YOLO(MODEL_PATH, task="detect")
+            # Exported models load lazily. Exercise inference before reporting ready.
+            candidate(np.zeros((640, 640, 3), dtype=np.uint8), imgsz=640, device="cpu", verbose=False)
+            model = candidate
             logger.info("Custom Model Loaded Successfully.")
             return True
         except Exception as e:
@@ -65,7 +68,7 @@ def infer(*args, **kwargs):
 
 def check_image_sharpness(img_gray: np.ndarray):
     """Calculates image sharpness using Laplacian variance."""
-    variance = cv2.Laplacian(img_gray, cv2.CV_64F).var()
+    variance = float(cv2.Laplacian(img_gray, cv2.CV_64F).var())
     is_blurry = variance < 80.0
     return round(float(variance), 2), is_blurry
 

@@ -43,3 +43,4 @@ ultralytics-thop==2.0.18
 urllib3==2.6.3
 uvicorn==0.40.0
 python-multipart==0.0.22
+onnxruntime==1.23.2

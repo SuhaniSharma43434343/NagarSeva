@@ -57,10 +57,10 @@ services:
         value: production
       - key: INTERNAL_API_KEY
         generateValue: true
-      - key: POTHOLE_MODEL_URL
-        sync: false
+      - key: MODEL_PATH
+        value: /app/models/pothole.onnx
       - key: POTHOLE_MODEL_SHA256
-        value: 565906940135e437d21493044145df6f8f637250f1a5a34e1fa054c6fc7c1f80
+        value: 6dcceaf34d08db94c4fffe3929820e7a115e15b5b122867ded797b8319b58e87
   - type: web
     name: nagarseva-sql-agent
     runtime: docker

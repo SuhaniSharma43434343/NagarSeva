@@ -9,10 +9,12 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 
 def prepare(name, required=True):
-    path = ROOT / "models" / f"{name}.pt"
+    path = Path(os.getenv("MODEL_PATH", str(ROOT / "models" / f"{name}.pt"))) if name == "pothole" else ROOT / "models" / f"{name}.pt"
     prefix = path.read_bytes()[:256] if path.exists() and path.stat().st_size < 1024 else b""
     pointer = prefix.startswith(b"version https://git-lfs.github.com/spec/v1")
     expected = os.getenv(f"{name.upper()}_MODEL_SHA256", "")
+    if path.suffix == ".onnx" and not expected:
+        raise RuntimeError("ONNX models require POTHOLE_MODEL_SHA256.")
     if pointer and not expected:
         expected = next(line.split(":")[1] for line in prefix.decode().splitlines() if line.startswith("oid sha256:"))
     url = os.getenv(f"{name.upper()}_MODEL_URL")

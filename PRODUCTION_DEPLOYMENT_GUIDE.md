@@ -1,5 +1,13 @@
 # NagarSeva — Master Production Deployment Guide & Runbook
 
+> Deployment update, 2026-09-10: the original `.pt` Git LFS object returns 404.
+> The Blueprint now packages the existing `frontend/public/model/model.onnx`
+> pothole model into the AI image. `MODEL_PATH` and its SHA-256 are configured
+> in `render.yaml`, so Step 2's external model upload is not required for this
+> Blueprint. ONNX Runtime is pinned and startup runs inference before readiness.
+> This verifies runtime compatibility, not model accuracy. See
+> `deploy/DEPLOYMENT_STATUS.md` for completed live setup and remaining steps.
+
 This guide contains the complete, step-by-step procedure to deploy the entire **NagarSeva** municipal infrastructure to production. It covers the **Backend API**, **AI Pothole Detection Microservice**, **SQL Agent Microservice**, **PostgreSQL Database**, **Vercel Web Frontend**, and **React Native Mobile App**.
 
 ---
